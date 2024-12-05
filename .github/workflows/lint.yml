@@ -1,0 +1,32 @@
+name: Lint
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    types: [opened, synchronize]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Github actions init
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.9"
+
+      - name: Update Pip
+        run: pip install --upgrade pip
+
+      - name: Install Dependencies
+        run: pip install ruff mypy
+
+      - name: Install
+        run: pip install -e .
+
+      - name: Lint
+        run: bash scripts/lint.sh

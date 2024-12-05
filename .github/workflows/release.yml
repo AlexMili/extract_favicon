@@ -1,0 +1,45 @@
+name: Release
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Github actions init
+        uses: actions/checkout@v4
+        with:
+          # To force fetching tags
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.9"
+
+      - name: Install build dependencies
+        run: pip install build
+
+      - name: Build
+        run: python -m build
+
+      - name: Read VERSION file
+        id: getversion
+        run: echo "version=$(cat src/extract_favicon/VERSION.md)" >> $GITHUB_OUTPUT
+
+      - name: Changelog
+        run: git log $(git describe --tags --abbrev=0)..HEAD --format="%s %h" > LATEST-CHANGES.md
+
+      - name: Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/extract_favicon-${{ steps.getversion.outputs.version }}-py3-none-any.whl
+            dist/extract_favicon-${{ steps.getversion.outputs.version }}.tar.gz
+          tag_name: v${{ steps.getversion.outputs.version }}
+          body_path: LATEST-CHANGES.md
+          token: ${{ secrets.PAT_EXTRACT_FAVICON }}

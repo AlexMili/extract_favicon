@@ -1,0 +1,45 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "extract-favicon"
+description = "Find and extract the favicon of any website"
+dynamic = ["version"]
+readme = "README.md"
+authors = [{ name = "Alex Mili" }]
+license = { file = "LICENSE" }
+requires-python = ">=3.9"
+classifiers = [
+    "License :: OSI Approved :: MIT License",
+    "Intended Audience :: Developers",
+]
+keywords = []
+dependencies = [
+    "bs4",
+    "pillow"
+]
+
+[project.urls]
+Homepage = "https://github.com/AlexMili/Extract_Favicon"
+Issues = "https://github.com/AlexMili/Extract_Favicon/issues"
+Repository = "https://github.com/AlexMili/Extract_Favicon"
+Documentation = "https://github.com/AlexMili/Extract_Favicon"
+
+
+[tool.hatch.build.targets.wheel]
+packages = ["./src/extract_favicon/"]
+
+[tool.hatch.version]
+path = "src/extract_favicon/VERSION.md"
+pattern = "(?P<version>.*)"
+
+[tool.ruff.lint.isort]
+lines-after-imports = 2
+known-first-party = ["extract_favicon"]
+
+[tool.mypy]
+strict = true
+exclude = [".venv", "test", "build", "dist"]
+ignore_missing_imports = true
+show_error_codes = true
