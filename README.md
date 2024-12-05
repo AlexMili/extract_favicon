@@ -5,12 +5,12 @@
 ## Installation
 
 ```bash
-pip install favicon-extract
+pip install extract_favicon
 ```
 
 ## Usage
 
-```console
+```python
 >>> import extract_favicon
 >>> icons = extract_favicon.from_html(my_html, root_url="https://www.python.org/static/")
 Icon(url='https://www.python.org/static/apple-touch-icon-144x144-precomposed.png', width=144, height=144, format='png')
