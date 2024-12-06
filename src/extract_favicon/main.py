@@ -15,8 +15,38 @@ LINK_TAGS: list[str] = [
     "shortcut icon",
     "apple-touch-icon",
     "apple-touch-icon-precomposed",
+    "mask-icon",
 ]
 
+# Source:
+# https://learn.microsoft.com/en-us/previous-versions/windows/internet-explorer/ie-developer/platform-apis/hh772707(v=vs.85)
+META_TAGS: list[str] = [
+    "msapplication-TileImage",
+    "msapplication-square70x70logo",
+    "msapplication-square150x150logo",
+    "msapplication-wide310x150logo",
+    "msapplication-square310x310logo",
+]
+
+# A fallback is a URL automatically checked by the browser
+# without explicit declaration in the HTML.
+# See
+# https://developer.apple.com/library/archive/documentation/AppleApplications/Reference/SafariWebContent/ConfiguringWebApplications/ConfiguringWebApplications.html#//apple_ref/doc/uid/TP40002051-CH3-SW4
+# https://developer.apple.com/design/human-interface-guidelines/app-icons#iOS-iPadOS-app-icon-sizes
+FALLBACKS: list[str] = [
+    "favicon.ico",
+    "apple-touch-icon.png",
+    "apple-touch-icon-180x180.png",
+    "apple-touch-icon-167x167.png",
+    "apple-touch-icon-152x152.png",
+    "apple-touch-icon-120x120.png",
+    "apple-touch-icon-114x114.png",
+    "apple-touch-icon-80x80.png",
+    "apple-touch-icon-87x87.png",
+    "apple-touch-icon-76x76.png",
+    "apple-touch-icon-58x58.png",
+    "apple-touch-icon-precomposed.png",
+]
 
 SIZE_RE: re.Pattern[str] = re.compile(
     r"(?P<width>\d{2,4})x(?P<height>\d{2,4})", flags=re.IGNORECASE
@@ -31,6 +61,14 @@ class Favicon(NamedTuple):
 
 
 def _has_content(text: Optional[str]) -> bool:
+    """Check if a string contains something.
+
+    Args:
+        text: the string to check.
+
+    Returns:
+        True if `text` is not None and its length is greater than 0.
+    """
     if text is None or len(text) == 0:
         return False
     else:
@@ -41,17 +79,17 @@ def _has_content(text: Optional[str]) -> bool:
 def _is_absolute(url: str) -> bool:
     """Check if an URL is absolute.
 
-    :param url: URL for site.
-    :type url: str
+    Args:
+        url: website's URL.
 
-    :return: True if homepage and false if it has a path.
-    :rtype: bool
+    Returns:
+        If full URL or relative path.
     """
     return _has_content(urlparse(url).netloc)
 
 
 def from_html(
-    html: str, root_url: Optional[str] = None, include_default_favicon: bool = False
+    html: str, root_url: Optional[str] = None, include_fallbacks: bool = False
 ) -> set[Favicon]:
     """Extract all favicons in a given HTML.
 
@@ -80,15 +118,15 @@ def from_html(
         ):
             tags.add(link_tag)
 
-    meta_name = "msapplication-TileImage"
-    for meta_tag in page.find_all(
-        "meta",
-        attrs={
-            "name": lambda n: _has_content(n) and n.lower() == meta_name.lower(),
-            "content": True,
-        },
-    ):
-        tags.add(meta_tag)
+    for tag in META_TAGS:
+        for meta_tag in page.find_all(
+            "meta",
+            attrs={
+                "name": lambda n: _has_content(n) and n.lower() == tag.lower(),
+                "content": True,
+            },
+        ):
+            tags.add(meta_tag)
 
     favicons = set()
     for tag in tags:
@@ -140,16 +178,16 @@ def from_html(
         favicon = Favicon(url_parsed.geturl(), ext[1:].lower(), width, height)
         favicons.add(favicon)
 
-    if include_default_favicon is True and len(favicons) == 0:
-        href = "/favicon.ico"
-        if root_url is not None:
-            url_parsed = urljoin(root_url, href)
-        else:
-            url_parsed = urlparse(href)
+    if include_fallbacks is True and len(favicons) == 0:
+        for href in FALLBACKS:
+            if root_url is not None:
+                url_parsed = urljoin(root_url, href)
+            else:
+                url_parsed = urlparse(href)
 
-        _, ext = os.path.splitext(url_parsed.path)
+            _, ext = os.path.splitext(url_parsed.path)
 
-        favicon = Favicon(url_parsed.geturl(), ext[1:].lower())
+            favicon = Favicon(url_parsed.geturl(), ext[1:].lower())
 
     return favicons
 
@@ -157,11 +195,11 @@ def from_html(
 def get_dimension(tag: Tag) -> Tuple[int, int]:
     """Get icon dimensions from size attribute or icon filename.
 
-    :param tag: Link or meta tag.
-    :type tag: :class:`bs4.element.Tag`
+    Args:
+        tag: Link or meta tag.
 
-    :return: If found, width and height, else (0,0).
-    :rtype: tuple(int, int)
+    Returns:
+        If found, width and height, else (0,0).
     """
     sizes = tag.get("sizes", "")
     if sizes and sizes != "any":
