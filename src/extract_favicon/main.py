@@ -3,7 +3,7 @@ import io
 import os
 import re
 from typing import NamedTuple, Optional, Tuple, Union
-from urllib.parse import urljoin, urlparse
+from urllib.parse import urljoin, urlparse, urlunparse
 
 import defusedxml.ElementTree as ETree
 from bs4 import BeautifulSoup
@@ -232,6 +232,27 @@ def from_html(
             _, ext = os.path.splitext(url_parsed.path)
 
             favicon = Favicon(url_parsed.geturl(), ext[1:].lower())
+
+    return favicons
+
+
+def _get_root_url(url: str) -> str:
+    parsed_url = urlparse(url)
+    url_replaced = parsed_url._replace(query="", path="")
+    return urlunparse(url_replaced)
+
+
+def from_url(url: str, include_fallbacks: bool = False) -> set[Favicon]:
+    result = is_reachable(url, head_optim=False, include_response=True)
+
+    if result["success"] is True:
+        favicons = from_html(
+            result["response"].content,
+            root_url=_get_root_url(result.get("final_url", None) or url),
+            include_fallbacks=include_fallbacks,
+        )
+    else:
+        favicons = set()
 
     return favicons
 
