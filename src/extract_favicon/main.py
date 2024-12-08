@@ -57,7 +57,7 @@ SIZE_RE: re.Pattern[str] = re.compile(
 
 class Favicon(NamedTuple):
     url: str
-    format: str
+    format: Optional[str]
     width: int = 0
     height: int = 0
 
@@ -71,10 +71,10 @@ class FaviconURL(NamedTuple):
 
 class RealFavicon(NamedTuple):
     url: FaviconURL
-    format: str
+    format: Optional[str]
     valid: bool
     original: Favicon
-    image: Union[Image.Image, bytes] = None
+    image: Optional[Union[Image.Image, bytes]] = None
     width: int = 0
     height: int = 0
 
@@ -162,7 +162,7 @@ def from_html(
     if base_tag is not None and root_url is None:
         root_url = base_tag["href"]
 
-    tags = set()
+    tags: set[Tag] = set()
     for rel in LINK_TAGS:
         for link_tag in page.find_all(
             "link",
@@ -182,7 +182,7 @@ def from_html(
 
     favicons = set()
     for tag in tags:
-        href = tag.get("href") or tag.get("content") or ""
+        href = tag.get("href") or tag.get("content") or ""  # type: ignore
         href = href.strip()
 
         # We skip if there is not content in href
@@ -225,13 +225,11 @@ def from_html(
     if include_fallbacks is True and len(favicons) == 0:
         for href in FALLBACKS:
             if root_url is not None:
-                url_parsed = urljoin(root_url, href)
-            else:
-                url_parsed = urlparse(href)
+                href = urljoin(root_url, href)
 
-            _, ext = os.path.splitext(url_parsed.path)
+            _, ext = os.path.splitext(href)
 
-            favicon = Favicon(url_parsed.geturl(), ext[1:].lower())
+            favicon = Favicon(href, ext[1:].lower())
 
     return favicons
 
@@ -298,7 +296,7 @@ def download(favicons: list[Favicon]) -> list[RealFavicon]:
                         width=0,
                         height=0,
                         original=fav,
-                        img=None,
+                        image=None,
                         valid=False,
                     )
                 )
@@ -342,12 +340,19 @@ def download(favicons: list[Favicon]) -> list[RealFavicon]:
                 )
             else:
                 img, is_valid = _load_image(result["response"].content)
+
+                width = height = 0
+                img_format = None
+                if img is not None:
+                    width, height = img.size
+                    img_format = img.format.lower()
+
                 real_favicons.append(
                     RealFavicon(
                         fav_url,
-                        img.format.lower(),
-                        width=img.size[0],
-                        height=img.size[1],
+                        img_format,
+                        width=width,
+                        height=height,
                         valid=is_valid,
                         image=img,
                         original=fav,
@@ -373,12 +378,19 @@ def download(favicons: list[Favicon]) -> list[RealFavicon]:
             fav_url = FaviconURL(
                 fav.url, final_url=fav.url, redirected=False, status_code=200
             )
+
+            width = height = 0
+            img_format = None
+            if img is not None:
+                width, height = img.size
+                img_format = img.format.lower()
+
             real_favicons.append(
                 RealFavicon(
                     fav_url,
-                    img.format.lower(),
-                    width=img.size[0],
-                    height=img.size[1],
+                    img_format,
+                    width=width,
+                    height=height,
                     valid=is_valid,
                     image=img,
                     original=fav,
