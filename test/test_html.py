@@ -57,7 +57,7 @@ def test_link_tag(tag: str):
         "64x64 32x32",
         "logo-128x128.png",
         "new york times",
-        "Uppercase X"
+        "Uppercase X",
     ],
 )
 def test_link_tag_sizes_attribute(tag, size):
@@ -173,8 +173,8 @@ def test_base64(tag):
     assert len(favicons) == 1
     favicon = favicons.pop()
     assert favicon.format == "png"
-    assert favicon.width == 1
-    assert favicon.height == 1
+    assert favicon.width == 0
+    assert favicon.height == 0
 
 
 # Test to verify <base> tag handling

@@ -2,12 +2,14 @@ import base64
 import io
 import os
 import re
-from typing import NamedTuple, Optional, Tuple
+from typing import NamedTuple, Optional, Tuple, Union
 from urllib.parse import urljoin, urlparse
 
+import defusedxml.ElementTree as ETree
 from bs4 import BeautifulSoup
 from bs4.element import Tag
-from PIL import Image
+from PIL import Image, UnidentifiedImageError
+from reachable import is_reachable
 
 
 LINK_TAGS: list[str] = [
@@ -60,6 +62,23 @@ class Favicon(NamedTuple):
     height: int = 0
 
 
+class FaviconURL(NamedTuple):
+    url: str
+    final_url: str
+    redirected: bool
+    status_code: int
+
+
+class RealFavicon(NamedTuple):
+    url: FaviconURL
+    format: str
+    valid: bool
+    original: Favicon
+    image: Union[Image.Image, bytes] = None
+    width: int = 0
+    height: int = 0
+
+
 def _has_content(text: Optional[str]) -> bool:
     """Check if a string contains something.
 
@@ -86,6 +105,39 @@ def _is_absolute(url: str) -> bool:
         If full URL or relative path.
     """
     return _has_content(urlparse(url).netloc)
+
+
+def _get_dimension(tag: Tag) -> Tuple[int, int]:
+    """Get icon dimensions from size attribute or icon filename.
+
+    Args:
+        tag: Link or meta tag.
+
+    Returns:
+        If found, width and height, else (0,0).
+    """
+    sizes = tag.get("sizes", "")
+    if sizes and sizes != "any":
+        # "16x16 32x32 64x64"
+        size = sizes.split(" ")
+        size.sort(reverse=True)
+        width, height = re.split(r"[x\xd7]", size[0], flags=re.I)
+    else:
+        filename = tag.get("href") or tag.get("content") or ""
+        size = SIZE_RE.search(filename)
+        if size:
+            width, height = size.group("width"), size.group("height")
+        else:
+            width, height = "0", "0"
+
+    # Repair bad html attribute values: sizes="192x192+"
+    width = "".join(c for c in width if c.isdigit())
+    height = "".join(c for c in height if c.isdigit())
+
+    width = int(width) if _has_content(width) else 0
+    height = int(height) if _has_content(height) else 0
+
+    return width, height
 
 
 def from_html(
@@ -149,15 +201,7 @@ def from_html(
                 .lower()
             )
 
-            if suffix == "svg+xml":
-                suffix = "svg"
-
-            bytes_content = base64.b64decode(data_img[1])
-            bytes_stream = io.BytesIO(bytes_content)
-            img = Image.open(bytes_stream)
-            width, height = img.size
-
-            favicon = Favicon(href, suffix, width, height)
+            favicon = Favicon(href, suffix, 0, 0)
             favicons.add(favicon)
             continue
         elif root_url is not None:
@@ -172,7 +216,7 @@ def from_html(
         else:
             url_parsed = urlparse(href)
 
-        width, height = get_dimension(tag)
+        width, height = _get_dimension(tag)
         _, ext = os.path.splitext(url_parsed.path)
 
         favicon = Favicon(url_parsed.geturl(), ext[1:].lower(), width, height)
@@ -192,34 +236,132 @@ def from_html(
     return favicons
 
 
-def get_dimension(tag: Tag) -> Tuple[int, int]:
-    """Get icon dimensions from size attribute or icon filename.
+def _load_image(bytes_content: bytes) -> Tuple[Optional[Image.Image], bool]:
+    is_valid: bool = False
+    img: Optional[Image.Image] = None
 
-    Args:
-        tag: Link or meta tag.
+    try:
+        bytes_stream = io.BytesIO(bytes_content)
+        img = Image.open(bytes_stream)
+        img.verify()
+        is_valid = True
+        # Since verify() closes the file cursor, we open it again for further processing
+        img = Image.open(bytes_stream)
+    except UnidentifiedImageError:
+        is_valid = False
+    except OSError as e:  # noqa
+        # Usually malformed images
+        is_valid = False
 
-    Returns:
-        If found, width and height, else (0,0).
-    """
-    sizes = tag.get("sizes", "")
-    if sizes and sizes != "any":
-        # "16x16 32x32 64x64"
-        size = sizes.split(" ")
-        size.sort(reverse=True)
-        width, height = re.split(r"[x\xd7]", size[0], flags=re.I)
-    else:
-        filename = tag.get("href") or tag.get("content") or ""
-        size = SIZE_RE.search(filename)
-        if size:
-            width, height = size.group("width"), size.group("height")
+    return img, is_valid
+
+
+def download(favicons: list[Favicon]) -> list[RealFavicon]:
+    real_favicons = []
+    for fav in favicons:
+        if fav.url[:5] != "data:":
+            result = is_reachable(fav.url, head_optim=False, include_response=True)
+
+            fav_url = FaviconURL(
+                fav.url,
+                final_url=result.get("final_url", fav.url),
+                redirected="redirect" in result,
+                status_code=result.get("status_code", -1),
+            )
+
+            if result["success"] is False:
+                real_favicons.append(
+                    RealFavicon(
+                        fav_url,
+                        None,
+                        width=0,
+                        height=0,
+                        original=fav,
+                        img=None,
+                        valid=False,
+                    )
+                )
+                continue
+
+            filename = os.path.basename(urlparse(fav.url).path)
+            if filename.lower().endswith(".svg") is True:
+                root = ETree.fromstring(result["response"].content)
+
+                # Check if the root tag is SVG
+                if root.tag.lower().endswith("svg"):
+                    is_valid = True
+                else:
+                    is_valid = False
+
+                width = 0
+                height = 0
+
+                if "width" in root.attrib:
+                    try:
+                        width = int(root.attrib["width"])
+                    except ValueError:
+                        pass
+
+                if "height" in root.attrib:
+                    try:
+                        height = int(root.attrib["height"])
+                    except ValueError:
+                        pass
+
+                real_favicons.append(
+                    RealFavicon(
+                        fav_url,
+                        "svg",
+                        width=width,
+                        height=height,
+                        valid=is_valid,
+                        image=ETree.tostring(root, encoding="utf-8"),
+                        original=fav,
+                    )
+                )
+            else:
+                img, is_valid = _load_image(result["response"].content)
+                real_favicons.append(
+                    RealFavicon(
+                        fav_url,
+                        img.format.lower(),
+                        width=img.size[0],
+                        height=img.size[1],
+                        valid=is_valid,
+                        image=img,
+                        original=fav,
+                    )
+                )
         else:
-            width, height = "0", "0"
+            data_img = fav.url.split(",")
+            suffix = (
+                data_img[0]
+                .replace("data:", "")
+                .replace(";base64", "")
+                .replace("image", "")
+                .replace("/", "")
+                .lower()
+            )
 
-    # Repair bad html attribute values: sizes="192x192+"
-    width = "".join(c for c in width if c.isdigit())
-    height = "".join(c for c in height if c.isdigit())
+            if suffix == "svg+xml":
+                suffix = "svg"
 
-    width = int(width) if _has_content(width) else 0
-    height = int(height) if _has_content(height) else 0
+            bytes_content = base64.b64decode(data_img[1])
+            img, is_valid = _load_image(bytes_content)
 
-    return width, height
+            fav_url = FaviconURL(
+                fav.url, final_url=fav.url, redirected=False, status_code=200
+            )
+            real_favicons.append(
+                RealFavicon(
+                    fav_url,
+                    img.format.lower(),
+                    width=img.size[0],
+                    height=img.size[1],
+                    valid=is_valid,
+                    image=img,
+                    original=fav,
+                )
+            )
+
+    return real_favicons

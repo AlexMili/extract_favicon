@@ -17,7 +17,9 @@ classifiers = [
 keywords = []
 dependencies = [
     "bs4",
-    "pillow"
+    "pillow",
+    "reachable",
+    "defusedxml",
 ]
 
 [project.urls]
