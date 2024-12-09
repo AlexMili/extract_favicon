@@ -5,6 +5,48 @@ import extract_favicon
 from extract_favicon.main import Favicon
 
 
+@pytest.fixture(scope="function")
+def favicons():
+    return {
+        Favicon(
+            url="https://www.python.org/static/apple-touch-icon-144x144-precomposed.png",
+            format="png",
+            width=144,
+            height=144,
+        ),
+        Favicon(
+            url="https://www.python.org/static/apple-touch-icon-114x114-precomposed.png",
+            format="png",
+            width=114,
+            height=114,
+        ),
+        Favicon(
+            url="https://www.python.org/static/metro-icon-144x144.png",
+            format="png",
+            width=144,
+            height=144,
+        ),
+        Favicon(
+            url="https://www.python.org/static/favicon.ico",
+            format="ico",
+            width=0,
+            height=0,
+        ),
+        Favicon(
+            url="https://www.python.org/static/apple-touch-icon-precomposed.png",
+            format="png",
+            width=0,
+            height=0,
+        ),
+        Favicon(
+            url="https://www.python.org/static/apple-touch-icon-72x72-precomposed.png",
+            format="png",
+            width=72,
+            height=72,
+        ),
+    }
+
+
 @pytest.mark.parametrize(
     "url",
     [
@@ -66,3 +108,13 @@ def test_gif(url):
     assert isinstance(favicons[0].image, Image.Image) is True
     assert favicons[0].width == 500
     assert favicons[0].height == 200
+
+
+@pytest.mark.parametrize(
+    "mode,expected_len",
+    [("all", 6), ("biggest", 1), ("smallest", 1)],
+    ids=["All mode", "Biggest mode", "Smallest mode"],
+)
+def test_mode(favicons, mode, expected_len):
+    favs = extract_favicon.download(favicons, mode=mode)
+    assert len(favs) == expected_len

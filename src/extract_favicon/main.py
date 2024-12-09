@@ -2,6 +2,7 @@ import base64
 import io
 import os
 import re
+import time
 from typing import NamedTuple, Optional, Tuple, Union
 from urllib.parse import urljoin, urlparse, urlunparse
 
@@ -149,7 +150,7 @@ def from_html(
         html: HTML to parse.
         root_url: Root URL where the favicon is located.
         include_default_favicon: Include /favicon.ico in the list when no other
-            favicons have been found
+            favicons have been found.
 
     Returns:
         A set of favicons.
@@ -275,9 +276,42 @@ def _load_image(bytes_content: bytes) -> Tuple[Optional[Image.Image], bool]:
     return img, is_valid
 
 
-def download(favicons: list[Favicon]) -> list[RealFavicon]:
-    real_favicons = []
-    for fav in favicons:
+def download(
+    favicons: Union[list[Favicon], set[Favicon]],
+    mode: str = "all",
+    include_unknown: bool = True,
+    sleep_time: int = 2,
+    sort: str = "ASC",
+) -> list[RealFavicon]:
+    """Download previsouly extracted favicons.
+
+    Args:
+        favicons: list of favicons to download.
+        mode: select the strategy to download favicons.
+            - `all`: download all favicons in the list.
+            - `biggest`: only download the biggest favicon in the list.
+            - `smallest`: only download the smallest favicon in the list.
+        include_unknown: include or not images with no width/height information.
+        sleep_time: number of seconds to wait between each requests to avoid blocking.
+        sort: sort favicons by size in ASC or DESC order. Only used for mode `all`.
+
+    Returns:
+        A set of favicons.
+    """
+    real_favicons: list[RealFavicon] = []
+    to_process: list[Favicon] = []
+
+    if include_unknown is False:
+        favicons = list(filter(lambda x: x.width != 0 and x.height != 0, favicons))
+
+    if mode.lower() in ["biggest", "smallest"]:
+        to_process = sorted(
+            favicons, key=lambda x: x.width * x.height, reverse=mode == "biggest"
+        )
+    else:
+        to_process = list(favicons)
+
+    for fav in to_process:
         if fav.url[:5] != "data:":
             result = is_reachable(fav.url, head_optim=False, include_response=True)
 
@@ -345,7 +379,9 @@ def download(favicons: list[Favicon]) -> list[RealFavicon]:
                 img_format = None
                 if img is not None:
                     width, height = img.size
-                    img_format = img.format.lower()
+                    img_format = img.format
+                    if img_format is not None:
+                        img_format = img_format.lower()
 
                 real_favicons.append(
                     RealFavicon(
@@ -383,7 +419,8 @@ def download(favicons: list[Favicon]) -> list[RealFavicon]:
             img_format = None
             if img is not None:
                 width, height = img.size
-                img_format = img.format.lower()
+                if img_format is not None:
+                    img_format = img_format.lower()
 
             real_favicons.append(
                 RealFavicon(
@@ -396,5 +433,16 @@ def download(favicons: list[Favicon]) -> list[RealFavicon]:
                     original=fav,
                 )
             )
+
+        # If we are in these modes, we need to exit the for loop
+        if mode in ["biggest", "smallest"]:
+            break
+
+        # Wait before next request to avoid detection
+        time.sleep(sleep_time)
+
+    real_favicons = sorted(
+        real_favicons, key=lambda x: x.width * x.height, reverse=sort.lower() == "desc"
+    )
 
     return real_favicons
