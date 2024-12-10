@@ -14,3 +14,10 @@ def test_guessing_size():
     favicons = extract_favicon.from_url(url)
     favicons = extract_favicon.check_availability(favicons)
     favicons = extract_favicon.guess_missing_sizes(favicons)
+
+
+def test_unreachable_url():
+    url = "https://example.com"
+    favicons = extract_favicon.from_url(url)
+    assert isinstance(favicons, set) is True
+    assert len(favicons) == 0

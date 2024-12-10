@@ -1,6 +1,7 @@
 import pytest
 
 import extract_favicon
+from extract_favicon.main import FALLBACKS
 
 
 HTML: str = """
@@ -192,3 +193,10 @@ def test_base_tag_link(tag):
     assert len(favicons) == 1
     favicon = favicons.pop()
     assert favicon.url == "http://example.com/favicon.jpg"
+
+
+def test_empty():
+    favicons = extract_favicon.from_html(
+        HTML.replace("%content%", ""), include_fallbacks=True
+    )
+    assert len(favicons) == len(FALLBACKS)
