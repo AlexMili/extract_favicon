@@ -241,6 +241,21 @@ def from_html(
 
 
 def _get_root_url(url: str) -> str:
+    """
+    Extracts the root URL from a given URL, removing any path, query, or fragments.
+
+    This function takes a full URL and parses it to isolate the root components:
+    scheme (e.g., "http"), netloc (e.g., "example.com"), and optional port. It
+    then returns the reconstructed URL without any path, query parameters, or
+    fragments.
+
+    Args:
+        url: The URL from which to extract the root.
+
+    Returns:
+        The root URL, including the scheme and netloc, but without any
+        additional paths, queries, or fragments.
+    """
     parsed_url = urlparse(url)
     url_replaced = parsed_url._replace(query="", path="")
     return urlunparse(url_replaced)
@@ -249,6 +264,25 @@ def _get_root_url(url: str) -> str:
 def from_url(
     url: str, include_fallbacks: bool = False, client: Optional[Client] = None
 ) -> set[Favicon]:
+    """Extracts favicons from a given URL.
+
+    This function attempts to retrieve the specified URL, parse its HTML, and extract any
+    associated favicons. If the URL is reachable and returns a successful response, the
+    function will parse the content for favicon references. If `include_fallbacks` is True,
+    it will also attempt to find fallback icons (e.g., by checking default icon paths).
+    If the URL is not reachable or returns an error response, an empty set is returned.
+
+    Args:
+        url: The URL from which to extract favicons.
+        include_fallbacks: Whether to include fallback favicons if none are
+            explicitly defined. Defaults to False.
+        client: A custom client instance from `reachable` package to use for performing
+            the HTTP request. If None, a default client configuration is used.
+
+    Returns:
+        A set of `Favicon` objects found in the target URL's HTML.
+
+    """
     result = is_reachable(url, head_optim=False, include_response=True, client=client)
 
     if result["success"] is True:
@@ -264,6 +298,23 @@ def from_url(
 
 
 def _load_image(bytes_content: bytes) -> Tuple[Optional[Image.Image], bool]:
+    """
+    Loads an image from the provided byte content and verifies its validity.
+
+    This function attempts to open and verify an image using the given
+    byte content. If the image is valid, it returns the loaded `Image.Image`
+    object and a boolean indicating successful validation. If the image is
+    invalid or cannot be opened, it returns `None` for the image and `False`
+    for the validity.
+
+    Args:
+        bytes_content: The byte content representing the image.
+
+    Returns:
+        A tuple where the first element  is the loaded `Image.Image` object if
+        the image is valid, otherwise `None`, and the second element is a boolean
+        indicating whether the image is valid.
+    """
     is_valid: bool = False
     img: Optional[Image.Image] = None
 
@@ -302,7 +353,8 @@ def download(
         include_unknown: include or not images with no width/height information.
         sleep_time: number of seconds to wait between each requests to avoid blocking.
         sort: sort favicons by size in ASC or DESC order. Only used for mode `all`.
-        client: use common client to reduce HTTP overhead.
+        client: A custom client instance from `reachable` package to use for performing
+            the HTTP request. If None, a default client configuration is used.
 
     Returns:
         A set of favicons.
@@ -464,6 +516,7 @@ def guess_size(favicon: Favicon, chunk_size: int = 512) -> Tuple[int, int]:
     """Get size of image by requesting first bytes.
 
     Args:
+        favicon: the favicon object from which to guess the size.
         chunk_size: bytes size to iterate over image stream.
 
     Returns:
@@ -502,6 +555,27 @@ def guess_missing_sizes(
     sleep_time: int = 1,
     load_base64_img: bool = False,
 ) -> list[Favicon]:
+    """
+    Attempts to determine missing dimensions (width and height) of favicons.
+
+    For each favicon in the provided collection, if the favicon is a base64-encoded
+    image (data URL) and `load_base64_img` is True, the function decodes and loads
+    the image to guess its dimensions. For non-base64 favicons with missing or zero
+    dimensions, the function attempts to guess the size by partially downloading the
+    icon data (using `guess_size`).
+
+    Args:
+        favicons: A list or set of `Favicon` objects for which to guess missing dimensions.
+        chunk_size: The size of the data chunk to download for guessing dimensions of
+            non-base64 images. Defaults to 512.
+        sleep_time: The number of seconds to sleep between guessing attempts to avoid
+            rate limits or overloading the server. Defaults to 1.
+        load_base64_img: Whether to decode and load base64-encoded images (data URLs)
+            to determine their dimensions. Defaults to False.
+
+    Returns:
+        A list of `Favicon` objects with dimensions updated where they could be determined.
+    """
     favs = list(favicons)
 
     for idx in range(len(favs)):
@@ -543,6 +617,29 @@ def check_availability(
     sleep_time: int = 1,
     client: Optional[Client] = None,
 ):
+    """
+    Checks the availability and final URLs of a collection of favicons.
+
+    For each favicon in the provided list or set, this function sends a head request
+    (or an optimized request if available) to check whether the favicon's URL is
+    reachable. If the favicon is reachable, its `reachable` attribute is updated to
+    True. If the request results in a redirect, the favicon's URL is updated to the
+    final URL.
+
+    A delay (`sleep_time`) can be specified between checks to avoid rate limits
+    or overloading the server.
+
+    Args:
+        favicons: A collection of `Favicon` objects to check for availability.
+        sleep_time: Number of seconds to sleep between each availability check to
+            control request rate. Defaults to 1.
+        client: A custom client instance from `reachable` package to use for performing
+            the HTTP request. If None, a default client configuration is used.
+
+    Returns:
+        A list of `Favicon` objects with updated `reachable` statuses and potentially
+        updated URLs if redirects were encountered.
+    """
     favs = list(favicons)
 
     for idx in range(len(favs)):
