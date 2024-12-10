@@ -224,25 +224,27 @@ async def guess_size(favicon: Favicon, chunk_size: int = 512) -> Tuple[int, int]
     Returns:
         The guessed width and height
     """
-    async with httpx.stream("GET", favicon.url) as response:
-        if (
-            200 <= response.status_code < 300
-            and "image" in response.headers["content-type"]
-        ):
-            bytes_parsed: int = 0
-            max_bytes_parsed: int = 2048
-            chunk_size = 512
-            parser = ImageFile.Parser()
+    img = None
+    async with httpx.AsyncClient() as client:
+        async with client.stream("GET", favicon.url) as response:
+            if (
+                200 <= response.status_code < 300
+                and "image" in response.headers["content-type"]
+            ):
+                bytes_parsed: int = 0
+                max_bytes_parsed: int = 2048
+                chunk_size = 512
+                parser = ImageFile.Parser()
 
-            async for chunk in response.aiter_bytes(chunk_size=chunk_size):
-                bytes_parsed += chunk_size
-                # partial_data += chunk
+                async for chunk in response.aiter_bytes(chunk_size=chunk_size):
+                    bytes_parsed += chunk_size
+                    # partial_data += chunk
 
-                parser.feed(chunk)
+                    parser.feed(chunk)
 
-                if parser.image is not None or bytes_parsed > max_bytes_parsed:
-                    img = parser.image
-                    break
+                    if parser.image is not None or bytes_parsed > max_bytes_parsed:
+                        img = parser.image
+                        break
 
     width = height = 0
     if img is not None:
@@ -252,13 +254,39 @@ async def guess_size(favicon: Favicon, chunk_size: int = 512) -> Tuple[int, int]
 
 
 async def guess_missing_sizes(
-    favicons: Union[list[Favicon], set[Favicon]], chunk_size=512, sleep_time: int = 1
+    favicons: Union[list[Favicon], set[Favicon]],
+    chunk_size=512,
+    sleep_time: int = 1,
+    load_base64_img: bool = False,
 ) -> list[Favicon]:
     favs = list(favicons)
 
     for idx in range(len(favs)):
-        if (favs[idx].width == 0 or favs[idx].height == 0) and (
-            favs[idx].reachable is None or favs[idx].reachable is True
+        if favs[idx].url[:5] == "data:" and load_base64_img is True:
+            data_img = favs[idx].url.split(",")
+            suffix = (
+                data_img[0]
+                .replace("data:", "")
+                .replace(";base64", "")
+                .replace("image", "")
+                .replace("/", "")
+                .lower()
+            )
+
+            if suffix == "svg+xml":
+                suffix = "svg"
+
+            bytes_content = base64.b64decode(data_img[1])
+            img, is_valid = _load_image(bytes_content)
+
+            if is_valid is True and img is not None:
+                width, height = img.size
+                favs[idx] = favs[idx]._replace(width=width, height=height)
+
+        elif (
+            favs[idx].url[:5] != "data:"
+            and (favs[idx].width == 0 or favs[idx].height == 0)
+            and (favs[idx].reachable is None or favs[idx].reachable is True)
         ):
             width, height = await guess_size(favs[idx], chunk_size=chunk_size)
             favs[idx] = favs[idx]._replace(width=width, height=height)
@@ -275,6 +303,9 @@ async def check_availability(
     favs = list(favicons)
 
     for idx in range(len(favs)):
+        if favs[idx].url[:5] == "data:":
+            continue
+
         result = await is_reachable_async(favs[idx].url, head_optim=True, client=client)
 
         if result["success"] is True:
