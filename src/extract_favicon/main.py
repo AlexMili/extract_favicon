@@ -496,13 +496,39 @@ def guess_size(favicon: Favicon, chunk_size: int = 512) -> Tuple[int, int]:
 
 
 def guess_missing_sizes(
-    favicons: Union[list[Favicon], set[Favicon]], chunk_size=512, sleep_time: int = 1
+    favicons: Union[list[Favicon], set[Favicon]],
+    chunk_size=512,
+    sleep_time: int = 1,
+    load_base64_img: bool = False,
 ) -> list[Favicon]:
     favs = list(favicons)
 
     for idx in range(len(favs)):
-        if (favs[idx].width == 0 or favs[idx].height == 0) and (
-            favs[idx].reachable is None or favs[idx].reachable is True
+        if favs[idx].url[:5] == "data:" and load_base64_img is True:
+            data_img = favs[idx].url.split(",")
+            suffix = (
+                data_img[0]
+                .replace("data:", "")
+                .replace(";base64", "")
+                .replace("image", "")
+                .replace("/", "")
+                .lower()
+            )
+
+            if suffix == "svg+xml":
+                suffix = "svg"
+
+            bytes_content = base64.b64decode(data_img[1])
+            img, is_valid = _load_image(bytes_content)
+
+            if is_valid is True and img is not None:
+                width, height = img.size
+                favs[idx] = favs[idx]._replace(width=width, height=height)
+
+        elif (
+            favs[idx].url[:5] != "data:"
+            and (favs[idx].width == 0 or favs[idx].height == 0)
+            and (favs[idx].reachable is None or favs[idx].reachable is True)
         ):
             width, height = guess_size(favs[idx], chunk_size=chunk_size)
             favs[idx] = favs[idx]._replace(width=width, height=height)
