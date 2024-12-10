@@ -235,7 +235,7 @@ def from_html(
 
             _, ext = os.path.splitext(href)
 
-            favicon = Favicon(href, ext[1:].lower())
+            favicons.add(Favicon(href, ext[1:].lower()))
 
     return favicons
 
@@ -320,7 +320,8 @@ def download(
     else:
         to_process = list(favicons)
 
-    for fav in to_process:
+    len_process = len(to_process)
+    for idx, fav in enumerate(to_process):
         if fav.url[:5] != "data:":
             result = is_reachable(
                 fav.url, head_optim=False, include_response=True, client=client
@@ -390,9 +391,8 @@ def download(
                 img_format = None
                 if img is not None:
                     width, height = img.size
-                    img_format = img.format
-                    if img_format is not None:
-                        img_format = img_format.lower()
+                    if img.format is not None:
+                        img_format = img.format.lower()
 
                 real_favicons.append(
                     RealFavicon(
@@ -430,8 +430,8 @@ def download(
             img_format = None
             if img is not None:
                 width, height = img.size
-                if img_format is not None:
-                    img_format = img_format.lower()
+                if img.format is not None:
+                    img_format = img.format.lower()
 
             real_favicons.append(
                 RealFavicon(
@@ -449,8 +449,9 @@ def download(
         if mode in ["biggest", "smallest"]:
             break
 
-        # Wait before next request to avoid detection
-        time.sleep(sleep_time)
+        # Wait before next request to avoid detection but skip it for the last item
+        if idx < len_process - 1:
+            time.sleep(sleep_time)
 
     real_favicons = sorted(
         real_favicons, key=lambda x: x.width * x.height, reverse=sort.lower() == "desc"
