@@ -7,10 +7,12 @@ from typing import NamedTuple, Optional, Tuple, Union
 from urllib.parse import urljoin, urlparse, urlunparse
 
 import defusedxml.ElementTree as ETree
+import httpx
 from bs4 import BeautifulSoup
 from bs4.element import Tag
-from PIL import Image, UnidentifiedImageError
+from PIL import Image, ImageFile, UnidentifiedImageError
 from reachable import is_reachable
+from reachable.client import Client
 
 
 LINK_TAGS: list[str] = [
@@ -61,6 +63,7 @@ class Favicon(NamedTuple):
     format: Optional[str]
     width: int = 0
     height: int = 0
+    reachable: Optional[bool] = None
 
 
 class FaviconURL(NamedTuple):
@@ -142,7 +145,9 @@ def _get_dimension(tag: Tag) -> Tuple[int, int]:
 
 
 def from_html(
-    html: str, root_url: Optional[str] = None, include_fallbacks: bool = False
+    html: str,
+    root_url: Optional[str] = None,
+    include_fallbacks: bool = False,
 ) -> set[Favicon]:
     """Extract all favicons in a given HTML.
 
@@ -241,8 +246,10 @@ def _get_root_url(url: str) -> str:
     return urlunparse(url_replaced)
 
 
-def from_url(url: str, include_fallbacks: bool = False) -> set[Favicon]:
-    result = is_reachable(url, head_optim=False, include_response=True)
+def from_url(
+    url: str, include_fallbacks: bool = False, client: Optional[Client] = None
+) -> set[Favicon]:
+    result = is_reachable(url, head_optim=False, include_response=True, client=client)
 
     if result["success"] is True:
         favicons = from_html(
@@ -282,6 +289,7 @@ def download(
     include_unknown: bool = True,
     sleep_time: int = 2,
     sort: str = "ASC",
+    client: Optional[Client] = None,
 ) -> list[RealFavicon]:
     """Download previsouly extracted favicons.
 
@@ -294,6 +302,7 @@ def download(
         include_unknown: include or not images with no width/height information.
         sleep_time: number of seconds to wait between each requests to avoid blocking.
         sort: sort favicons by size in ASC or DESC order. Only used for mode `all`.
+        client: use common client to reduce HTTP overhead.
 
     Returns:
         A set of favicons.
@@ -313,7 +322,9 @@ def download(
 
     for fav in to_process:
         if fav.url[:5] != "data:":
-            result = is_reachable(fav.url, head_optim=False, include_response=True)
+            result = is_reachable(
+                fav.url, head_optim=False, include_response=True, client=client
+            )
 
             fav_url = FaviconURL(
                 fav.url,
@@ -446,3 +457,77 @@ def download(
     )
 
     return real_favicons
+
+
+def guess_size(favicon: Favicon, chunk_size: int = 512) -> Tuple[int, int]:
+    """Get size of image by requesting first bytes.
+
+    Args:
+        chunk_size: bytes size to iterate over image stream.
+
+    Returns:
+        The guessed width and height
+    """
+    with httpx.stream("GET", favicon.url) as response:
+        if (
+            200 <= response.status_code < 300
+            and "image" in response.headers["content-type"]
+        ):
+            bytes_parsed: int = 0
+            max_bytes_parsed: int = 2048
+            chunk_size = 512
+            parser = ImageFile.Parser()
+
+            for chunk in response.iter_bytes(chunk_size=chunk_size):
+                bytes_parsed += chunk_size
+                # partial_data += chunk
+
+                parser.feed(chunk)
+
+                if parser.image is not None or bytes_parsed > max_bytes_parsed:
+                    img = parser.image
+                    break
+
+    width = height = 0
+    if img is not None:
+        width, height = img.size
+
+    return width, height
+
+
+def guess_missing_sizes(
+    favicons: Union[list[Favicon], set[Favicon]], chunk_size=512, sleep_time: int = 1
+) -> list[Favicon]:
+    favs = list(favicons)
+
+    for idx in range(len(favs)):
+        if (favs[idx].width == 0 or favs[idx].height == 0) and (
+            favs[idx].reachable is None or favs[idx].reachable is True
+        ):
+            width, height = guess_size(favs[idx], chunk_size=chunk_size)
+            favs[idx] = favs[idx]._replace(width=width, height=height)
+            time.sleep(sleep_time)
+
+    return favs
+
+
+def check_availability(
+    favicons: Union[list[Favicon], set[Favicon]],
+    sleep_time: int = 1,
+    client: Optional[Client] = None,
+):
+    favs = list(favicons)
+
+    for idx in range(len(favs)):
+        result = is_reachable(favs[idx].url, head_optim=True, client=client)
+
+        if result["success"] is True:
+            favs[idx] = favs[idx]._replace(reachable=True)
+
+        # If has been redirected
+        if "redirect" in result:
+            favs[idx] = favs[idx]._replace(url=result.get("final_url", favs[idx].url))
+
+        time.sleep(sleep_time)
+
+    return favs

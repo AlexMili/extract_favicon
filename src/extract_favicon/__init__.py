@@ -1,9 +1,15 @@
 import os.path as osp
 
-from .main import download, from_html, from_url
+from .main import check_availability, download, from_html, from_url, guess_missing_sizes
 
 
-__all__ = ["download", "from_html", "from_url"]
+__all__ = [
+    "check_availability",
+    "download",
+    "from_html",
+    "from_url",
+    "guess_missing_sizes",
+]
 
 version_path = osp.join(osp.dirname(__file__), "VERSION.md")
 if osp.exists(version_path):
