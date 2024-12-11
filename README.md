@@ -1,8 +1,27 @@
 # Extract Favicon
 
-`extract-favicon` is a Python library to find and extract the favicon of any website.
+---
+
+**Documentation**: <a href="https://alexmili.github.io/extract_favicon" target="_blank">https://alexmili.github.io/extract_favicon</a>
+
+**Source Code**: <a href="https://github.com/alexmili/extract_favicon" target="_blank">https://github.com/alexmili/extract_favicon</a>
+
+---
+
+**Extract Favicon** is designed to easily retrieve favicons from any website. Built atop robust `reachable` and `BeautifulSoup`, it aims to deliver accurate and efficient favicon extraction for web scraping and data analysis workflows.
+
+Key features include:
+
+* **Automatic Extraction**: Detects multiple favicon references like `<link>`, `<meta>` and inline base64-encoded icons.
+* **Smart Fallbacks**: When explicit icons aren’t defined, it checks standard fallback routes (like `favicon.ico`) to provide consistent results even on sites without standard declarations.
+* **Size Guessing**: Dynamically determines favicon dimensions, even for images lacking explicit size information, by partially downloading and parsing their headers.
+* **Base64 Support**: Easily handles inline data URLs, decoding base64-encoded images and validating them on-the-fly.
+* **Availability Checks**: Validates each favicon’s URL, following redirects and marking icons as reachable or not.
+* **Async Support**: Offers asynchronous methods (via `asyncio`) to efficiently handle multiple favicon extractions concurrently, enhancing overall performance when dealing with numerous URLs.
 
 ## Installation
+
+Create and activate a virtual environment and then install `extract_favicon`:
 
 ```bash
 pip install extract_favicon
