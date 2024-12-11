@@ -154,8 +154,7 @@ def from_html(
     Args:
         html: HTML to parse.
         root_url: Root URL where the favicon is located.
-        include_default_favicon: Include /favicon.ico in the list when no other
-            favicons have been found.
+        include_fallbacks: Whether to include fallback favicons like `/favicon.ico`.
 
     Returns:
         A set of favicons.
@@ -254,7 +253,7 @@ def _get_root_url(url: str) -> str:
 
     Returns:
         The root URL, including the scheme and netloc, but without any
-        additional paths, queries, or fragments.
+            additional paths, queries, or fragments.
     """
     parsed_url = urlparse(url)
     url_replaced = parsed_url._replace(query="", path="")
@@ -551,7 +550,7 @@ def guess_size(favicon: Favicon, chunk_size: int = 512) -> Tuple[int, int]:
 
 def guess_missing_sizes(
     favicons: Union[list[Favicon], set[Favicon]],
-    chunk_size=512,
+    chunk_size: int = 512,
     sleep_time: int = 1,
     load_base64_img: bool = False,
 ) -> list[Favicon]:
@@ -616,7 +615,7 @@ def check_availability(
     favicons: Union[list[Favicon], set[Favicon]],
     sleep_time: int = 1,
     client: Optional[Client] = None,
-):
+) -> list[Favicon]:
     """
     Checks the availability and final URLs of a collection of favicons.
 
@@ -638,7 +637,7 @@ def check_availability(
 
     Returns:
         A list of `Favicon` objects with updated `reachable` statuses and potentially
-        updated URLs if redirects were encountered.
+            updated URLs if redirects were encountered.
     """
     favs = list(favicons)
 

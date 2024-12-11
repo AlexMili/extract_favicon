@@ -16,17 +16,17 @@ classifiers = [
 ]
 keywords = []
 dependencies = [
-    "bs4",
+    "beautifulsoup4",
     "pillow",
     "reachable",
     "defusedxml",
 ]
 
 [project.urls]
-Homepage = "https://github.com/AlexMili/Extract_Favicon"
+Homepage = "https://alexmili.github.io/extract_favicon"
 Issues = "https://github.com/AlexMili/Extract_Favicon/issues"
 Repository = "https://github.com/AlexMili/Extract_Favicon"
-Documentation = "https://github.com/AlexMili/Extract_Favicon"
+Documentation = "https://alexmili.github.io/extract_favicon"
 
 
 [tool.hatch.build.targets.wheel]

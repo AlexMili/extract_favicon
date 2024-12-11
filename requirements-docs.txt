@@ -1,0 +1,7 @@
+mkdocs
+# For the theme
+mkdocs-material
+mkdocs-material-extensions
+# For auto generating reference API pages
+mkdocstrings[python]
+griffe-typingdoc
