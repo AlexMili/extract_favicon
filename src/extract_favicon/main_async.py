@@ -255,7 +255,7 @@ async def guess_size(favicon: Favicon, chunk_size: int = 512) -> Tuple[int, int]
 
 async def guess_missing_sizes(
     favicons: Union[list[Favicon], set[Favicon]],
-    chunk_size=512,
+    chunk_size: int = 512,
     sleep_time: int = 1,
     load_base64_img: bool = False,
 ) -> list[Favicon]:
@@ -299,7 +299,7 @@ async def check_availability(
     favicons: Union[list[Favicon], set[Favicon]],
     sleep_time: int = 1,
     client: Optional[AsyncClient] = None,
-):
+) -> list[Favicon]:
     favs = list(favicons)
 
     for idx in range(len(favs)):
