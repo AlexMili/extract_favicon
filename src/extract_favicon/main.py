@@ -333,6 +333,91 @@ def _load_image(bytes_content: bytes) -> Tuple[Optional[Image.Image], bool]:
     return img, is_valid
 
 
+def _get_meta_image(img: Optional[Image.Image]) -> Tuple[int, int, Optional[str]]:
+    width = height = 0
+    img_format = None
+
+    if img is not None:
+        width, height = img.size
+        if img.format is not None:
+            img_format = img.format.lower()
+
+    return width, height, img_format
+
+
+def _load_base64_img(favicon: Favicon) -> RealFavicon:
+    data_img = favicon.url.split(",")
+    suffix = (
+        data_img[0]
+        .replace("data:", "")
+        .replace(";base64", "")
+        .replace("image", "")
+        .replace("/", "")
+        .lower()
+    )
+
+    if suffix == "svg+xml":
+        suffix = "svg"
+
+    bytes_content = base64.b64decode(data_img[1])
+    img, is_valid = _load_image(bytes_content)
+
+    fav_url = FaviconURL(
+        favicon.url, final_url=favicon.url, redirected=False, status_code=200
+    )
+
+    width, height, img_format = _get_meta_image(img)
+
+    r_favicon = RealFavicon(
+        fav_url,
+        img_format,
+        width=width,
+        height=height,
+        valid=is_valid,
+        image=img,
+        original=favicon,
+    )
+
+    return r_favicon
+
+
+def _load_svg_img(favicon: Favicon, bytes_content: bytes) -> RealFavicon:
+    root = ETree.fromstring(bytes_content)
+
+    # Check if the root tag is SVG
+    if root.tag.lower().endswith("svg"):
+        is_valid = True
+    else:
+        is_valid = False
+
+    width = 0
+    height = 0
+
+    if "width" in root.attrib:
+        try:
+            width = int(root.attrib["width"])
+        except ValueError:
+            pass
+
+    if "height" in root.attrib:
+        try:
+            height = int(root.attrib["height"])
+        except ValueError:
+            pass
+
+    r_favicon = RealFavicon(
+        FaviconURL("", "", False, -1),
+        "svg",
+        width=width,
+        height=height,
+        valid=is_valid,
+        image=ETree.tostring(root, encoding="utf-8"),
+        original=favicon,
+    )
+
+    return r_favicon
+
+
 def download(
     favicons: Union[list[Favicon], set[Favicon]],
     mode: str = "all",
@@ -401,49 +486,13 @@ def download(
 
             filename = os.path.basename(urlparse(fav.url).path)
             if filename.lower().endswith(".svg") is True:
-                root = ETree.fromstring(result["response"].content)
-
-                # Check if the root tag is SVG
-                if root.tag.lower().endswith("svg"):
-                    is_valid = True
-                else:
-                    is_valid = False
-
-                width = 0
-                height = 0
-
-                if "width" in root.attrib:
-                    try:
-                        width = int(root.attrib["width"])
-                    except ValueError:
-                        pass
-
-                if "height" in root.attrib:
-                    try:
-                        height = int(root.attrib["height"])
-                    except ValueError:
-                        pass
-
-                real_favicons.append(
-                    RealFavicon(
-                        fav_url,
-                        "svg",
-                        width=width,
-                        height=height,
-                        valid=is_valid,
-                        image=ETree.tostring(root, encoding="utf-8"),
-                        original=fav,
-                    )
-                )
+                new_fav = _load_svg_img(fav, result["response"].content)
+                new_fav = new_fav._replace(url=fav_url)
+                real_favicons.append(new_fav)
             else:
                 img, is_valid = _load_image(result["response"].content)
 
-                width = height = 0
-                img_format = None
-                if img is not None:
-                    width, height = img.size
-                    if img.format is not None:
-                        img_format = img.format.lower()
+                width, height, img_format = _get_meta_image(img)
 
                 real_favicons.append(
                     RealFavicon(
@@ -457,44 +506,8 @@ def download(
                     )
                 )
         else:
-            data_img = fav.url.split(",")
-            suffix = (
-                data_img[0]
-                .replace("data:", "")
-                .replace(";base64", "")
-                .replace("image", "")
-                .replace("/", "")
-                .lower()
-            )
-
-            if suffix == "svg+xml":
-                suffix = "svg"
-
-            bytes_content = base64.b64decode(data_img[1])
-            img, is_valid = _load_image(bytes_content)
-
-            fav_url = FaviconURL(
-                fav.url, final_url=fav.url, redirected=False, status_code=200
-            )
-
-            width = height = 0
-            img_format = None
-            if img is not None:
-                width, height = img.size
-                if img.format is not None:
-                    img_format = img.format.lower()
-
-            real_favicons.append(
-                RealFavicon(
-                    fav_url,
-                    img_format,
-                    width=width,
-                    height=height,
-                    valid=is_valid,
-                    image=img,
-                    original=fav,
-                )
-            )
+            new_fav = _load_base64_img(fav)
+            real_favicons.append(new_fav)
 
         # If we are in these modes, we need to exit the for loop
         if mode in ["biggest", "smallest"]:

@@ -4,7 +4,6 @@ import time
 from typing import Optional, Tuple, Union
 from urllib.parse import urlparse
 
-import defusedxml.ElementTree as ETree
 import httpx
 from PIL import ImageFile
 from reachable import is_reachable_async
@@ -14,8 +13,11 @@ from extract_favicon.main import (
     Favicon,
     FaviconURL,
     RealFavicon,
+    _get_meta_image,
     _get_root_url,
+    _load_base64_img,
     _load_image,
+    _load_svg_img,
     from_html,
 )
 
@@ -76,7 +78,8 @@ async def download(
     else:
         to_process = list(favicons)
 
-    for fav in to_process:
+    len_process = len(to_process)
+    for idx, fav in enumerate(to_process):
         if fav.url[:5] != "data:":
             result = await is_reachable_async(
                 fav.url, head_optim=False, include_response=True, client=client
@@ -105,50 +108,13 @@ async def download(
 
             filename = os.path.basename(urlparse(fav.url).path)
             if filename.lower().endswith(".svg") is True:
-                root = ETree.fromstring(result["response"].content)
-
-                # Check if the root tag is SVG
-                if root.tag.lower().endswith("svg"):
-                    is_valid = True
-                else:
-                    is_valid = False
-
-                width = 0
-                height = 0
-
-                if "width" in root.attrib:
-                    try:
-                        width = int(root.attrib["width"])
-                    except ValueError:
-                        pass
-
-                if "height" in root.attrib:
-                    try:
-                        height = int(root.attrib["height"])
-                    except ValueError:
-                        pass
-
-                real_favicons.append(
-                    RealFavicon(
-                        fav_url,
-                        "svg",
-                        width=width,
-                        height=height,
-                        valid=is_valid,
-                        image=ETree.tostring(root, encoding="utf-8"),
-                        original=fav,
-                    )
-                )
+                new_fav = _load_svg_img(fav, result["response"].content)
+                new_fav = new_fav._replace(url=fav_url)
+                real_favicons.append(new_fav)
             else:
                 img, is_valid = _load_image(result["response"].content)
 
-                width = height = 0
-                img_format = None
-                if img is not None:
-                    width, height = img.size
-                    img_format = img.format
-                    if img_format is not None:
-                        img_format = img_format.lower()
+                width, height, img_format = _get_meta_image(img)
 
                 real_favicons.append(
                     RealFavicon(
@@ -162,51 +128,16 @@ async def download(
                     )
                 )
         else:
-            data_img = fav.url.split(",")
-            suffix = (
-                data_img[0]
-                .replace("data:", "")
-                .replace(";base64", "")
-                .replace("image", "")
-                .replace("/", "")
-                .lower()
-            )
-
-            if suffix == "svg+xml":
-                suffix = "svg"
-
-            bytes_content = base64.b64decode(data_img[1])
-            img, is_valid = _load_image(bytes_content)
-
-            fav_url = FaviconURL(
-                fav.url, final_url=fav.url, redirected=False, status_code=200
-            )
-
-            width = height = 0
-            img_format = None
-            if img is not None:
-                width, height = img.size
-                if img_format is not None:
-                    img_format = img_format.lower()
-
-            real_favicons.append(
-                RealFavicon(
-                    fav_url,
-                    img_format,
-                    width=width,
-                    height=height,
-                    valid=is_valid,
-                    image=img,
-                    original=fav,
-                )
-            )
+            new_fav = _load_base64_img(fav)
+            real_favicons.append(new_fav)
 
         # If we are in these modes, we need to exit the for loop
         if mode in ["biggest", "smallest"]:
             break
 
-        # Wait before next request to avoid detection
-        time.sleep(sleep_time)
+        # Wait before next request to avoid detection but skip it for the last item
+        if idx < len_process - 1:
+            time.sleep(sleep_time)
 
     real_favicons = sorted(
         real_favicons, key=lambda x: x.width * x.height, reverse=sort.lower() == "desc"
