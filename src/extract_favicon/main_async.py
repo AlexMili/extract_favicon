@@ -238,3 +238,64 @@ async def check_availability(
             await asyncio.sleep(sleep_time)
 
     return favs
+
+
+async def get_best_favicon(
+    url: str,
+    html: Optional[Union[str, bytes]] = None,
+    client: Optional[AsyncClient] = None,
+    strategy: list[str] = ["content", "duckduckgo", "google", "generate"],
+) -> Optional[Favicon]:
+    favicon = None
+
+    for strat in strategy:
+        if strat.lower() not in STRATEGIES:
+            raise ValueError(f"{strat} strategy not recognized. Aborting.")
+
+        if strat.lower() == "content":
+            favicons = set()
+
+            if html is not None and len(html) > 0:
+                favicons = from_html(
+                    str(html), root_url=_get_root_url(url), include_fallbacks=True
+                )
+            else:
+                favicons = await from_url(url, include_fallbacks=True, client=client)
+
+            favicons_data = await guess_missing_sizes(favicons, load_base64_img=True)
+            favicons_data = await check_availability(favicons_data, client=client)
+
+            favicons_data = await download(favicons_data, mode="largest", client=client)
+
+            if len(favicons_data) > 0:
+                favicon = favicons_data[0]
+
+        elif strat.lower() == "duckduckgo":
+            fav = await from_duckduckgo(url, client)
+
+            if (
+                fav.reachable is True
+                and fav.valid is True
+                and fav.width > 0
+                and fav.height > 0
+            ):
+                favicon = fav
+
+        elif strat.lower() == "google":
+            fav = await from_google(url, client)
+
+            if (
+                fav.reachable is True
+                and fav.valid is True
+                and fav.width > 0
+                and fav.height > 0
+            ):
+                favicon = fav
+
+        elif strat.lower() == "generate":
+            favicon = generate_favicon(url)
+
+        if favicon is not None:
+            break
+
+    return favicon

@@ -453,3 +453,88 @@ def generate_favicon(url: str) -> Favicon:
     return favicon
 
 
+def get_best_favicon(
+    url: str,
+    html: Optional[Union[str, bytes]] = None,
+    client: Optional[Client] = None,
+    strategy: list[str] = ["content", "duckduckgo", "google", "generate"],
+) -> Optional[Favicon]:
+    """
+    Attempts to retrieve the best favicon for a given URL using multiple strategies.
+
+    The function iterates over the specified strategies in order, stopping as soon as a valid
+    favicon is found:
+        - "content": Parses the provided HTML (if any) or fetches page content from the URL to
+        extract favicons. It then guesses missing sizes, checks availability, and downloads
+        the largest icon.
+        - "duckduckgo": Retrieves a favicon from DuckDuckGo if the previous step fails.
+        - "google": Retrieves a favicon from Google if the previous step fails.
+        - "generate": Generates a placeholder favicon if all else fails.
+
+    Args:
+        url: The URL for which the favicon is being retrieved.
+        html: Optional HTML content to parse. If not provided, the page content is retrieved
+            from the URL.
+        client: Optional HTTP client to use for network requests.
+        strategy: A list of strategy names to attempt in sequence. Defaults to
+            ["content", "duckduckgo", "google", "generate"].
+
+    Returns:
+        The best found favicon if successful, otherwise None.
+
+    Raises:
+        ValueError: If an unrecognized strategy name is encountered in the list.
+    """
+    favicon = None
+
+    for strat in strategy:
+        if strat.lower() not in STRATEGIES:
+            raise ValueError(f"{strat} strategy not recognized. Aborting.")
+
+        if strat.lower() == "content":
+            favicons = set()
+
+            if html is not None and len(html) > 0:
+                favicons = from_html(
+                    str(html), root_url=_get_root_url(url), include_fallbacks=True
+                )
+            else:
+                favicons = from_url(url, include_fallbacks=True, client=client)
+
+            favicons_data = guess_missing_sizes(favicons, load_base64_img=True)
+            favicons_data = check_availability(favicons_data, client=client)
+
+            favicons_data = download(favicons_data, mode="largest", client=client)
+
+            if len(favicons_data) > 0:
+                favicon = favicons_data[0]
+
+        elif strat.lower() == "duckduckgo":
+            fav = from_duckduckgo(url, client)
+
+            if (
+                fav.reachable is True
+                and fav.valid is True
+                and fav.width > 0
+                and fav.height > 0
+            ):
+                favicon = fav
+
+        elif strat.lower() == "google":
+            fav = from_google(url, client)
+
+            if (
+                fav.reachable is True
+                and fav.valid is True
+                and fav.width > 0
+                and fav.height > 0
+            ):
+                favicon = fav
+
+        elif strat.lower() == "generate":
+            favicon = generate_favicon(url)
+
+        if favicon is not None:
+            break
+
+    return favicon

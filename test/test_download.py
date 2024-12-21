@@ -162,3 +162,41 @@ def test_generate_default():
     assert favicon.height == 100
 
 
+@pytest.mark.parametrize(
+    "url,strategy,img_format,width,height",
+    [
+        (
+            "https://www.trustlist.ai/",
+            ["content", "duckduckgo", "google", "generate"],
+            "png",
+            300,
+            300,
+        ),
+        ("https://www.trustlist.ai/", ["generate"], "svg", 100, 100),
+        ("https://www.trustlist.ai/", ["duckduckgo"], "png", 300, 300),
+        ("https://www.trustlist.ai/", ["google"], "png", 256, 256),
+        (
+            "https://somerandometld.trustlist.ai/",
+            ["content", "duckduckgo", "google", "generate"],
+            "svg",
+            100,
+            100,
+        ),
+    ],
+    ids=[
+        "Default strategy",
+        "Gen first strat",
+        "Duckduckgo first strat",
+        "Google first strat",
+        "Default strategy unknown domain",
+    ],
+)
+def test_best_favicon(url, strategy, img_format, width, height):
+    favicon = extract_favicon.get_best_favicon(url, strategy=strategy)
+
+    assert favicon is not None
+    assert favicon.format == img_format
+    assert favicon.reachable is True
+    assert favicon.valid is True
+    assert favicon.width == width
+    assert favicon.height == height

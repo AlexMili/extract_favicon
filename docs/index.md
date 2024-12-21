@@ -19,7 +19,9 @@ Key features include:
 * **Availability Checks**: Validates each favicon’s URL, following redirects and marking icons as reachable or not.
 * **DuckDuckGo Support**: Downloads Favicon directly from DuckDuckGo's public favicon API.
 * **Google Support**: Downloads Favicon directly from Google's public favicon API.
+* **Custom Strategy**: Sets the order in which the different available techniques are used to retrieve the best favicon.
 * **Generate Favicon**: Generate a default SVG favicon when none are available.
+* **Get Best Favicon**: Easily gets the best Favicon available, generate one if none are found.
 * **Async Support**: Offers asynchronous methods (via `asyncio`) to efficiently handle multiple favicon extractions concurrently, enhancing overall performance when dealing with numerous URLs.
 
 ## Installation
@@ -121,6 +123,27 @@ placeholder_favicon = generate_favicon("https://example.com")
 
 # The Favicon object contains the SVG data as if it were a real icon.
 print("Generated favicon URL:", placeholder_favicon.url)
+```
+
+### Get the Best Favicon Available
+
+The `get_best_favicon` function tries multiple techniques in a specified order to find the best possible favicon. By default, the order is:
+
+* `content`: Attempts to extract favicons from HTML or directly from the URL.
+* `duckduckgo`: Fetches a favicon from DuckDuckGo if the first step fails.
+* `google`: Retrieves a favicon from Google if the previous steps fails.
+* `generate`: Generates a placeholder if no other method is successful.
+
+The function returns the first valid favicon found or None if none is discovered.
+
+```python
+best_icon = get_best_favicon("https://example.com")
+
+if best_icon:
+    print("Best favicon URL:", best_icon.url)
+    print("Favicon dimensions:", best_icon.width, "x", best_icon.height)
+else:
+    print("No valid favicon found for this URL.")
 ```
 
 ## Dependencies

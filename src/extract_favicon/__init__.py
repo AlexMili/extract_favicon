@@ -8,6 +8,7 @@ from .main import (
     from_html,
     from_url,
     generate_favicon,
+    get_best_favicon,
     guess_missing_sizes,
 )
 
@@ -20,6 +21,7 @@ __all__ = [
     "from_html",
     "from_url",
     "generate_favicon",
+    "get_best_favicon",
     "guess_missing_sizes",
 ]
 
