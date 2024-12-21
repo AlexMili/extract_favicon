@@ -148,3 +148,17 @@ def test_mode(favicons, mode, expected_len):
 async def test_mode_async(favicons, mode, expected_len):
     favs = await ef_async.download(favicons, mode=mode)
     assert len(favs) == expected_len
+
+
+def test_generate_default():
+    url = "https://www.trustlist.ai/"
+    favicon = extract_favicon.generate_favicon(url)
+
+    assert favicon is not None
+    assert favicon.format == "svg"
+    assert favicon.reachable is True
+    assert favicon.valid is True
+    assert favicon.width == 100
+    assert favicon.height == 100
+
+

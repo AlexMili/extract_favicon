@@ -422,3 +422,34 @@ def check_availability(
             time.sleep(sleep_time)
 
     return favs
+
+
+def generate_favicon(url: str) -> Favicon:
+    """
+    Generates a placeholder favicon as an SVG containing the first letter of the domain.
+
+    This function extracts the domain name from the provided URL using `tldextract`,
+    takes the first letter of the domain (capitalized), and embeds it into an SVG
+    image. The generated SVG is then loaded into a `Favicon` object.
+
+    Args:
+        url: The URL from which to extract the domain and generate the favicon.
+
+    Returns:
+        A `Favicon` instance populated with the generated SVG data.
+    """
+    tld = tldextract.extract(url)
+    letter = tld.domain[0].upper()
+    svg_data = f"""
+    <svg width="100" height="100" xmlns="http://www.w3.org/2000/svg">
+        <rect width="100%" height="100%" fill="#ccc"/>
+        <text x="50%" y="60%" font-size="100px" text-anchor="middle" dominant-baseline="middle" fill="#000">{letter}</text>
+    </svg>
+    """
+
+    favicon = Favicon(url)
+    favicon = _load_svg_img(favicon, svg_data)
+
+    return favicon
+
+

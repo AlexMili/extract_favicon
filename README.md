@@ -19,6 +19,7 @@ Key features include:
 * **Availability Checks**: Validates each favicon’s URL, following redirects and marking icons as reachable or not.
 * **DuckDuckGo Support**: Downloads Favicon directly from DuckDuckGo's public favicon API.
 * **Google Support**: Downloads Favicon directly from Google's public favicon API.
+* **Generate Favicon**: Generate a default SVG favicon when none are available.
 * **Async Support**: Offers asynchronous methods (via `asyncio`) to efficiently handle multiple favicon extractions concurrently, enhancing overall performance when dealing with numerous URLs.
 
 ## Installation

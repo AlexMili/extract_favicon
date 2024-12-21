@@ -19,6 +19,7 @@ Key features include:
 * **Availability Checks**: Validates each favicon’s URL, following redirects and marking icons as reachable or not.
 * **DuckDuckGo Support**: Downloads Favicon directly from DuckDuckGo's public favicon API.
 * **Google Support**: Downloads Favicon directly from Google's public favicon API.
+* **Generate Favicon**: Generate a default SVG favicon when none are available.
 * **Async Support**: Offers asynchronous methods (via `asyncio`) to efficiently handle multiple favicon extractions concurrently, enhancing overall performance when dealing with numerous URLs.
 
 ## Installation
@@ -111,6 +112,17 @@ for favicon in favicons_with_sizes:
     print(favicon.url, favicon.width, favicon.height)
 ```
 
+### Generating a Favicon
+
+The generate_favicon function builds a simple placeholder favicon in SVG format based on the first letter of the domain. It’s useful when other methods fail or if you need a fallback icon quickly.
+
+```python
+placeholder_favicon = generate_favicon("https://example.com")
+
+# The Favicon object contains the SVG data as if it were a real icon.
+print("Generated favicon URL:", placeholder_favicon.url)
+```
+
 ## Dependencies
 
 When you install `extract_favicon` it comes with the following dependencies:
@@ -119,6 +131,7 @@ When you install `extract_favicon` it comes with the following dependencies:
 * <a href="https://github.com/python-pillow/Pillow" target="_blank"><code>Pillow</code></a> - to load images to get real size once downloaded and to guess image size based on its streamed headers.
 * <a href="https://github.com/alexmili/reachable" target="_blank"><code>Reachable</code></a> - to check availability of favicons' URLs, download content and handle redirects, HTTP errors and some simple anti-bot protections.
 * <a href="https://github.com/tiran/defusedxml" target="_blank"><code>DefusedXML</code></a> - to parse and check validity of SVG files.
+* <a href="https://github.com/john-kurkowski/tldextract" target="_blank"><code>TLDextract</code></a> - to parse and extract domain information from URL.
 
 ## License
 
