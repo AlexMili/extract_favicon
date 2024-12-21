@@ -3,7 +3,6 @@ import time
 from typing import Optional, Union
 from urllib.parse import urljoin, urlparse
 
-import httpx
 import tldextract
 from bs4 import BeautifulSoup
 from bs4.element import Tag
@@ -257,7 +256,12 @@ def download(
     return real_favicons
 
 
-def guess_size(favicon: Favicon, chunk_size: int = 512, force: bool = False) -> Favicon:
+def guess_size(
+    favicon: Favicon,
+    chunk_size: int = 512,
+    force: bool = False,
+    client: Optional[Client] = None,
+) -> Favicon:
     """Get size of image by requesting first bytes.
 
     Args:
@@ -275,7 +279,13 @@ def guess_size(favicon: Favicon, chunk_size: int = 512, force: bool = False) -> 
         # TODO: add warning log
         return favicon
 
-    with httpx.stream("GET", favicon.url) as response:
+    close_client: bool = True
+    if client is None:
+        client = Client()
+    else:
+        close_client = False
+
+    with client.stream("GET", favicon.url) as response:
         fav_http = FaviconHttp(
             original_url=favicon.url,
             final_url=str(response.url),
@@ -312,6 +322,9 @@ def guess_size(favicon: Favicon, chunk_size: int = 512, force: bool = False) -> 
         else:
             favicon = favicon._replace(reachable=False, valid=False, http=fav_http)
 
+    if close_client is True:
+        client.close()
+
     return favicon
 
 
@@ -320,6 +333,7 @@ def guess_missing_sizes(
     chunk_size: int = 512,
     sleep_time: int = 1,
     load_base64_img: bool = False,
+    client: Optional[Client] = None,
 ) -> list[Favicon]:
     """
     Attempts to determine missing dimensions (width and height) of favicons.
@@ -349,7 +363,7 @@ def guess_missing_sizes(
         if favs[idx].url[:5] == "data:" and load_base64_img is True:
             favs[idx] = _load_base64_img(favs[idx])
         else:
-            favs[idx] = guess_size(favs[idx], chunk_size=chunk_size)
+            favs[idx] = guess_size(favs[idx], chunk_size=chunk_size, client=client)
 
             # Skip sleep when last iteration
             if idx < len_favs - 1:

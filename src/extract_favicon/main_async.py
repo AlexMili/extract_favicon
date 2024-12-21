@@ -1,7 +1,6 @@
 import asyncio
 from typing import Optional, Union
 
-import httpx
 import tldextract
 from PIL import ImageFile
 from reachable import is_reachable_async
@@ -116,7 +115,10 @@ async def download(
 
 
 async def guess_size(
-    favicon: Favicon, chunk_size: int = 512, force: bool = False
+    favicon: Favicon,
+    chunk_size: int = 512,
+    force: bool = False,
+    client: Optional[AsyncClient] = None,
 ) -> Favicon:
     """Get size of image by requesting first bytes.
 
@@ -135,43 +137,52 @@ async def guess_size(
         # TODO: add warning log
         return favicon
 
-    async with httpx.AsyncClient() as client:
-        async with client.stream("GET", favicon.url) as response:
-            fav_http = FaviconHttp(
-                original_url=favicon.url,
-                final_url=str(response.url),
-                redirected=favicon.url != str(response.url),
-                status_code=response.status_code,
-            )
+    close_client: bool = True
+    if client is None:
+        client = AsyncClient()
+        await client.open()
+    else:
+        close_client = False
 
-            if (
-                200 <= response.status_code < 300
-                and "image" in response.headers["content-type"]
-            ):
-                favicon = favicon._replace(reachable=True, http=fav_http)
+    async with client.stream("GET", favicon.url) as response:
+        fav_http = FaviconHttp(
+            original_url=favicon.url,
+            final_url=str(response.url),
+            redirected=favicon.url != str(response.url),
+            status_code=response.status_code,
+        )
 
-                bytes_parsed: int = 0
-                max_bytes_parsed: int = 2048
-                chunk_size = 512
-                parser = ImageFile.Parser()
+        if (
+            200 <= response.status_code < 300
+            and "image" in response.headers["content-type"]
+        ):
+            favicon = favicon._replace(reachable=True, http=fav_http)
 
-                async for chunk in response.aiter_bytes(chunk_size=chunk_size):
-                    bytes_parsed += chunk_size
-                    # partial_data += chunk
+            bytes_parsed: int = 0
+            max_bytes_parsed: int = 2048
+            chunk_size = 512
+            parser = ImageFile.Parser()
 
-                    parser.feed(chunk)
+            async for chunk in response.aiter_bytes(chunk_size=chunk_size):
+                bytes_parsed += chunk_size
+                # partial_data += chunk
 
-                    if parser.image is not None or bytes_parsed > max_bytes_parsed:
-                        img = parser.image
-                        if img is not None:
-                            width, height = img.size
-                            favicon = favicon._replace(width=width, height=height)
-                        break
-            elif 200 <= response.status_code < 300:
-                # No "image" content-type so we put valid=False
-                favicon = favicon._replace(reachable=True, valid=False, http=fav_http)
-            else:
-                favicon = favicon._replace(reachable=False, valid=False, http=fav_http)
+                parser.feed(chunk)
+
+                if parser.image is not None or bytes_parsed > max_bytes_parsed:
+                    img = parser.image
+                    if img is not None:
+                        width, height = img.size
+                        favicon = favicon._replace(width=width, height=height)
+                    break
+        elif 200 <= response.status_code < 300:
+            # No "image" content-type so we put valid=False
+            favicon = favicon._replace(reachable=True, valid=False, http=fav_http)
+        else:
+            favicon = favicon._replace(reachable=False, valid=False, http=fav_http)
+
+    if close_client is True:
+        await client.close()
 
     return favicon
 
@@ -181,6 +192,7 @@ async def guess_missing_sizes(
     chunk_size: int = 512,
     sleep_time: int = 1,
     load_base64_img: bool = False,
+    client: Optional[AsyncClient] = None,
 ) -> list[Favicon]:
     favs = list(favicons)
 
@@ -189,7 +201,9 @@ async def guess_missing_sizes(
         if favs[idx].url[:5] == "data:" and load_base64_img is True:
             favs[idx] = _load_base64_img(favs[idx])
         else:
-            favs[idx] = await guess_size(favs[idx], chunk_size=chunk_size)
+            favs[idx] = await guess_size(
+                favs[idx], chunk_size=chunk_size, client=client
+            )
 
             # Skip sleep when last iteration
             if idx < len_favs - 1:
