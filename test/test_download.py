@@ -49,13 +49,12 @@ def favicons():
 
 
 def test_base64(base64_img):
-    fav = Favicon(base64_img, None, width=0, height=0)
+    fav = Favicon(base64_img, format=None, width=0, height=0)
     favicons = extract_favicon.download([fav])
     assert len(favicons) == 1
-    assert favicons[0].original == fav
-    assert favicons[0].url.url == fav.url
+    assert favicons[0].url == fav.url
     assert favicons[0].format == "png"
-    assert favicons[0].url.final_url == fav.url
+    assert favicons[0].http is None
     assert favicons[0].valid is True
     assert isinstance(favicons[0].image, Image.Image) is True
     assert favicons[0].width == 1
@@ -64,13 +63,12 @@ def test_base64(base64_img):
 
 @pytest.mark.asyncio
 async def test_base64_async(base64_img):
-    fav = Favicon(base64_img, None, width=0, height=0)
+    fav = Favicon(base64_img, format=None, width=0, height=0)
     favicons = await ef_async.download([fav])
     assert len(favicons) == 1
-    assert favicons[0].original == fav
-    assert favicons[0].url.url == fav.url
+    assert favicons[0].url == fav.url
     assert favicons[0].format == "png"
-    assert favicons[0].url.final_url == fav.url
+    assert favicons[0].http is None
     assert favicons[0].valid is True
     assert isinstance(favicons[0].image, Image.Image) is True
     assert favicons[0].width == 1
@@ -78,13 +76,12 @@ async def test_base64_async(base64_img):
 
 
 def test_svg(svg_url):
-    fav = Favicon(svg_url, None, width=0, height=0)
+    fav = Favicon(svg_url, format=None, width=0, height=0)
     favicons = extract_favicon.download([fav])
     assert len(favicons) == 1
-    assert favicons[0].original == fav
     assert favicons[0].format == "svg"
-    assert favicons[0].url.url == fav.url
-    assert favicons[0].url.final_url == fav.url
+    assert favicons[0].url == fav.url
+    assert favicons[0].http.final_url == fav.url
     assert favicons[0].valid is True
     assert isinstance(favicons[0].image, bytes) is True
     assert favicons[0].width == 900
@@ -93,13 +90,12 @@ def test_svg(svg_url):
 
 @pytest.mark.asyncio
 async def test_svg_async(svg_url):
-    fav = Favicon(svg_url, None, width=0, height=0)
+    fav = Favicon(svg_url, format=None, width=0, height=0)
     favicons = await ef_async.download([fav])
     assert len(favicons) == 1
-    assert favicons[0].original == fav
     assert favicons[0].format == "svg"
-    assert favicons[0].url.url == fav.url
-    assert favicons[0].url.final_url == fav.url
+    assert favicons[0].url == fav.url
+    assert favicons[0].http.final_url == fav.url
     assert favicons[0].valid is True
     assert isinstance(favicons[0].image, bytes) is True
     assert favicons[0].width == 900
@@ -107,13 +103,12 @@ async def test_svg_async(svg_url):
 
 
 def test_gif(gif_url):
-    fav = Favicon(gif_url, None, width=0, height=0)
+    fav = Favicon(gif_url, format=None, width=0, height=0)
     favicons = extract_favicon.download([fav])
     assert len(favicons) == 1
-    assert favicons[0].original == fav
     assert favicons[0].format == "gif"
-    assert favicons[0].url.url == fav.url
-    assert favicons[0].url.final_url == fav.url
+    assert favicons[0].url == fav.url
+    assert favicons[0].http.final_url == fav.url
     assert favicons[0].valid is True
     assert isinstance(favicons[0].image, Image.Image) is True
     assert favicons[0].width == 500
@@ -122,13 +117,12 @@ def test_gif(gif_url):
 
 @pytest.mark.asyncio
 async def test_gif_async(gif_url):
-    fav = Favicon(gif_url, None, width=0, height=0)
+    fav = Favicon(gif_url, format=None, width=0, height=0)
     favicons = await ef_async.download([fav])
     assert len(favicons) == 1
-    assert favicons[0].original == fav
     assert favicons[0].format == "gif"
-    assert favicons[0].url.url == fav.url
-    assert favicons[0].url.final_url == fav.url
+    assert favicons[0].url == fav.url
+    assert favicons[0].http.final_url == fav.url
     assert favicons[0].valid is True
     assert isinstance(favicons[0].image, Image.Image) is True
     assert favicons[0].width == 500
@@ -137,8 +131,8 @@ async def test_gif_async(gif_url):
 
 @pytest.mark.parametrize(
     "mode,expected_len",
-    [("all", 6), ("biggest", 1), ("smallest", 1)],
-    ids=["All mode", "Biggest mode", "Smallest mode"],
+    [("all", 6), ("largest", 1), ("smallest", 1)],
+    ids=["All mode", "Largest mode", "Smallest mode"],
 )
 def test_mode(favicons, mode, expected_len):
     favs = extract_favicon.download(favicons, mode=mode)
@@ -147,8 +141,8 @@ def test_mode(favicons, mode, expected_len):
 
 @pytest.mark.parametrize(
     "mode,expected_len",
-    [("all", 6), ("biggest", 1), ("smallest", 1)],
-    ids=["All mode", "Biggest mode", "Smallest mode"],
+    [("all", 6), ("largest", 1), ("smallest", 1)],
+    ids=["All mode", "Largest mode", "Smallest mode"],
 )
 @pytest.mark.asyncio
 async def test_mode_async(favicons, mode, expected_len):

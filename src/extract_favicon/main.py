@@ -1,147 +1,18 @@
-import base64
-import io
 import os
-import re
 import time
-from typing import NamedTuple, Optional, Tuple, Union
-from urllib.parse import urljoin, urlparse, urlunparse
+from typing import Optional, Union
+from urllib.parse import urljoin, urlparse
 
-import defusedxml.ElementTree as ETree
 import httpx
 from bs4 import BeautifulSoup
 from bs4.element import Tag
-from PIL import Image, ImageFile, UnidentifiedImageError
+from PIL import ImageFile
 from reachable import is_reachable
 from reachable.client import Client
 
-
-LINK_TAGS: list[str] = [
-    "icon",
-    "shortcut icon",
-    "apple-touch-icon",
-    "apple-touch-icon-precomposed",
-    "mask-icon",
-]
-
-# Source:
-# https://learn.microsoft.com/en-us/previous-versions/windows/internet-explorer/ie-developer/platform-apis/hh772707(v=vs.85)
-META_TAGS: list[str] = [
-    "msapplication-TileImage",
-    "msapplication-square70x70logo",
-    "msapplication-square150x150logo",
-    "msapplication-wide310x150logo",
-    "msapplication-square310x310logo",
-]
-
-# A fallback is a URL automatically checked by the browser
-# without explicit declaration in the HTML.
-# See
-# https://developer.apple.com/library/archive/documentation/AppleApplications/Reference/SafariWebContent/ConfiguringWebApplications/ConfiguringWebApplications.html#//apple_ref/doc/uid/TP40002051-CH3-SW4
-# https://developer.apple.com/design/human-interface-guidelines/app-icons#iOS-iPadOS-app-icon-sizes
-FALLBACKS: list[str] = [
-    "favicon.ico",
-    "apple-touch-icon.png",
-    "apple-touch-icon-180x180.png",
-    "apple-touch-icon-167x167.png",
-    "apple-touch-icon-152x152.png",
-    "apple-touch-icon-120x120.png",
-    "apple-touch-icon-114x114.png",
-    "apple-touch-icon-80x80.png",
-    "apple-touch-icon-87x87.png",
-    "apple-touch-icon-76x76.png",
-    "apple-touch-icon-58x58.png",
-    "apple-touch-icon-precomposed.png",
-]
-
-SIZE_RE: re.Pattern[str] = re.compile(
-    r"(?P<width>\d{2,4})x(?P<height>\d{2,4})", flags=re.IGNORECASE
-)
-
-
-class Favicon(NamedTuple):
-    url: str
-    format: Optional[str]
-    width: int = 0
-    height: int = 0
-    reachable: Optional[bool] = None
-
-
-class FaviconURL(NamedTuple):
-    url: str
-    final_url: str
-    redirected: bool
-    status_code: int
-
-
-class RealFavicon(NamedTuple):
-    url: FaviconURL
-    format: Optional[str]
-    valid: bool
-    original: Favicon
-    image: Optional[Union[Image.Image, bytes]] = None
-    width: int = 0
-    height: int = 0
-
-
-def _has_content(text: Optional[str]) -> bool:
-    """Check if a string contains something.
-
-    Args:
-        text: the string to check.
-
-    Returns:
-        True if `text` is not None and its length is greater than 0.
-    """
-    if text is None or len(text) == 0:
-        return False
-    else:
-        return True
-
-
-# From https://github.com/scottwernervt/favicon/
-def _is_absolute(url: str) -> bool:
-    """Check if an URL is absolute.
-
-    Args:
-        url: website's URL.
-
-    Returns:
-        If full URL or relative path.
-    """
-    return _has_content(urlparse(url).netloc)
-
-
-def _get_dimension(tag: Tag) -> Tuple[int, int]:
-    """Get icon dimensions from size attribute or icon filename.
-
-    Args:
-        tag: Link or meta tag.
-
-    Returns:
-        If found, width and height, else (0,0).
-    """
-    sizes = tag.get("sizes", "")
-    if sizes and sizes != "any":
-        # "16x16 32x32 64x64"
-        size = sizes.split(" ")
-        size.sort(reverse=True)
-        width, height = re.split(r"[x\xd7]", size[0], flags=re.I)
-    else:
-        filename = tag.get("href") or tag.get("content") or ""
-        size = SIZE_RE.search(filename)
-        if size:
-            width, height = size.group("width"), size.group("height")
-        else:
-            width, height = "0", "0"
-
-    # Repair bad html attribute values: sizes="192x192+"
-    width = "".join(c for c in width if c.isdigit())
-    height = "".join(c for c in height if c.isdigit())
-
-    width = int(width) if _has_content(width) else 0
-    height = int(height) if _has_content(height) else 0
-
-    return width, height
+from .config import FALLBACKS, LINK_TAGS, META_TAGS, STRATEGIES, Favicon, FaviconHttp
+from .loader import _load_base64_img, _load_svg_img, load_image
+from .utils import _get_dimension, _get_root_url, _has_content, _is_absolute
 
 
 def from_html(
@@ -206,7 +77,7 @@ def from_html(
                 .lower()
             )
 
-            favicon = Favicon(href, suffix, 0, 0)
+            favicon = Favicon(href, format=suffix, width=0, height=0)
             favicons.add(favicon)
             continue
         elif root_url is not None:
@@ -224,7 +95,9 @@ def from_html(
         width, height = _get_dimension(tag)
         _, ext = os.path.splitext(url_parsed.path)
 
-        favicon = Favicon(url_parsed.geturl(), ext[1:].lower(), width, height)
+        favicon = Favicon(
+            url_parsed.geturl(), format=ext[1:].lower(), width=width, height=height
+        )
         favicons.add(favicon)
 
     if include_fallbacks is True and len(favicons) == 0:
@@ -234,30 +107,9 @@ def from_html(
 
             _, ext = os.path.splitext(href)
 
-            favicons.add(Favicon(href, ext[1:].lower()))
+            favicons.add(Favicon(href, format=ext[1:].lower()))
 
     return favicons
-
-
-def _get_root_url(url: str) -> str:
-    """
-    Extracts the root URL from a given URL, removing any path, query, or fragments.
-
-    This function takes a full URL and parses it to isolate the root components:
-    scheme (e.g., "http"), netloc (e.g., "example.com"), and optional port. It
-    then returns the reconstructed URL without any path, query parameters, or
-    fragments.
-
-    Args:
-        url: The URL from which to extract the root.
-
-    Returns:
-        The root URL, including the scheme and netloc, but without any
-            additional paths, queries, or fragments.
-    """
-    parsed_url = urlparse(url)
-    url_replaced = parsed_url._replace(query="", path="")
-    return urlunparse(url_replaced)
 
 
 def from_url(
@@ -296,126 +148,12 @@ def from_url(
     return favicons
 
 
-def _load_image(bytes_content: bytes) -> Tuple[Optional[Image.Image], bool]:
-    """
-    Loads an image from the provided byte content and verifies its validity.
-
-    This function attempts to open and verify an image using the given
-    byte content. If the image is valid, it returns the loaded `Image.Image`
-    object and a boolean indicating successful validation. If the image is
-    invalid or cannot be opened, it returns `None` for the image and `False`
-    for the validity.
-
-    Args:
-        bytes_content: The byte content representing the image.
-
-    Returns:
-        A tuple where the first element  is the loaded `Image.Image` object if
-        the image is valid, otherwise `None`, and the second element is a boolean
-        indicating whether the image is valid.
-    """
-    is_valid: bool = False
-    img: Optional[Image.Image] = None
-
-    try:
-        bytes_stream = io.BytesIO(bytes_content)
-        img = Image.open(bytes_stream)
-        img.verify()
-        is_valid = True
-        # Since verify() closes the file cursor, we open it again for further processing
-        img = Image.open(bytes_stream)
-    except UnidentifiedImageError:
-        is_valid = False
-    except OSError as e:  # noqa
-        # Usually malformed images
-        is_valid = False
-
-    return img, is_valid
 
 
-def _get_meta_image(img: Optional[Image.Image]) -> Tuple[int, int, Optional[str]]:
-    width = height = 0
-    img_format = None
-
-    if img is not None:
-        width, height = img.size
-        if img.format is not None:
-            img_format = img.format.lower()
-
-    return width, height, img_format
 
 
-def _load_base64_img(favicon: Favicon) -> RealFavicon:
-    data_img = favicon.url.split(",")
-    suffix = (
-        data_img[0]
-        .replace("data:", "")
-        .replace(";base64", "")
-        .replace("image", "")
-        .replace("/", "")
-        .lower()
-    )
-
-    if suffix == "svg+xml":
-        suffix = "svg"
-
-    bytes_content = base64.b64decode(data_img[1])
-    img, is_valid = _load_image(bytes_content)
-
-    fav_url = FaviconURL(
-        favicon.url, final_url=favicon.url, redirected=False, status_code=200
-    )
-
-    width, height, img_format = _get_meta_image(img)
-
-    r_favicon = RealFavicon(
-        fav_url,
-        img_format,
-        width=width,
-        height=height,
-        valid=is_valid,
-        image=img,
-        original=favicon,
-    )
-
-    return r_favicon
 
 
-def _load_svg_img(favicon: Favicon, bytes_content: bytes) -> RealFavicon:
-    root = ETree.fromstring(bytes_content)
-
-    # Check if the root tag is SVG
-    if root.tag.lower().endswith("svg"):
-        is_valid = True
-    else:
-        is_valid = False
-
-    width = 0
-    height = 0
-
-    if "width" in root.attrib:
-        try:
-            width = int(root.attrib["width"])
-        except ValueError:
-            pass
-
-    if "height" in root.attrib:
-        try:
-            height = int(root.attrib["height"])
-        except ValueError:
-            pass
-
-    r_favicon = RealFavicon(
-        FaviconURL("", "", False, -1),
-        "svg",
-        width=width,
-        height=height,
-        valid=is_valid,
-        image=ETree.tostring(root, encoding="utf-8"),
-        original=favicon,
-    )
-
-    return r_favicon
 
 
 def download(
@@ -425,14 +163,14 @@ def download(
     sleep_time: int = 2,
     sort: str = "ASC",
     client: Optional[Client] = None,
-) -> list[RealFavicon]:
+) -> list[Favicon]:
     """Download previsouly extracted favicons.
 
     Args:
         favicons: list of favicons to download.
         mode: select the strategy to download favicons.
             - `all`: download all favicons in the list.
-            - `biggest`: only download the biggest favicon in the list.
+            - `largest`: only download the largest favicon in the list.
             - `smallest`: only download the smallest favicon in the list.
         include_unknown: include or not images with no width/height information.
         sleep_time: number of seconds to wait between each requests to avoid blocking.
@@ -441,76 +179,30 @@ def download(
             the HTTP request. If None, a default client configuration is used.
 
     Returns:
-        A set of favicons.
+        A list of favicons.
     """
-    real_favicons: list[RealFavicon] = []
+    real_favicons: list[Favicon] = []
     to_process: list[Favicon] = []
 
     if include_unknown is False:
         favicons = list(filter(lambda x: x.width != 0 and x.height != 0, favicons))
 
-    if mode.lower() in ["biggest", "smallest"]:
+    if mode.lower() in ["largest", "smallest"]:
         to_process = sorted(
-            favicons, key=lambda x: x.width * x.height, reverse=mode == "biggest"
+            favicons, key=lambda x: x.width * x.height, reverse=mode == "largest"
         )
     else:
         to_process = list(favicons)
 
     len_process = len(to_process)
     for idx, fav in enumerate(to_process):
-        if fav.url[:5] != "data:":
-            result = is_reachable(
-                fav.url, head_optim=False, include_response=True, client=client
-            )
+        fav = load_image(fav, client=client)
 
-            fav_url = FaviconURL(
-                fav.url,
-                final_url=result.get("final_url", fav.url),
-                redirected="redirect" in result,
-                status_code=result.get("status_code", -1),
-            )
+        if fav.reachable is True and fav.valid is True:
+            real_favicons.append(fav)
 
-            if result["success"] is False:
-                real_favicons.append(
-                    RealFavicon(
-                        fav_url,
-                        None,
-                        width=0,
-                        height=0,
-                        original=fav,
-                        image=None,
-                        valid=False,
-                    )
-                )
-                continue
-
-            filename = os.path.basename(urlparse(fav.url).path)
-            if filename.lower().endswith(".svg") is True:
-                new_fav = _load_svg_img(fav, result["response"].content)
-                new_fav = new_fav._replace(url=fav_url)
-                real_favicons.append(new_fav)
-            else:
-                img, is_valid = _load_image(result["response"].content)
-
-                width, height, img_format = _get_meta_image(img)
-
-                real_favicons.append(
-                    RealFavicon(
-                        fav_url,
-                        img_format,
-                        width=width,
-                        height=height,
-                        valid=is_valid,
-                        image=img,
-                        original=fav,
-                    )
-                )
-        else:
-            new_fav = _load_base64_img(fav)
-            real_favicons.append(new_fav)
-
-        # If we are in these modes, we need to exit the for loop
-        if mode in ["biggest", "smallest"]:
+        # If we are in one of these modes, we need to exit the for loop
+        if mode in ["largest", "smallest"]:
             break
 
         # Wait before next request to avoid detection but skip it for the last item
@@ -524,21 +216,38 @@ def download(
     return real_favicons
 
 
-def guess_size(favicon: Favicon, chunk_size: int = 512) -> Tuple[int, int]:
+def guess_size(favicon: Favicon, chunk_size: int = 512, force: bool = False) -> Favicon:
     """Get size of image by requesting first bytes.
 
     Args:
         favicon: the favicon object from which to guess the size.
         chunk_size: bytes size to iterate over image stream.
+        force: try to guess the size even if the width and height are not zero.
 
     Returns:
-        The guessed width and height
+        The Favicon object with updated width, height, reachable and http parameters.
     """
+    if favicon.width != 0 and favicon.height != 0 and force is False:
+        # TODO: add warning log
+        return favicon
+    elif favicon.reachable is False and force is False:
+        # TODO: add warning log
+        return favicon
+
     with httpx.stream("GET", favicon.url) as response:
+        fav_http = FaviconHttp(
+            original_url=favicon.url,
+            final_url=str(response.url),
+            redirected=favicon.url != str(response.url),
+            status_code=response.status_code,
+        )
+
         if (
             200 <= response.status_code < 300
             and "image" in response.headers["content-type"]
         ):
+            favicon = favicon._replace(reachable=True, http=fav_http)
+
             bytes_parsed: int = 0
             max_bytes_parsed: int = 2048
             chunk_size = 512
@@ -552,13 +261,17 @@ def guess_size(favicon: Favicon, chunk_size: int = 512) -> Tuple[int, int]:
 
                 if parser.image is not None or bytes_parsed > max_bytes_parsed:
                     img = parser.image
+                    if img is not None:
+                        width, height = img.size
+                        favicon = favicon._replace(width=width, height=height)
                     break
+        elif 200 <= response.status_code < 300:
+            # No "image" content-type so we put valid=False
+            favicon = favicon._replace(reachable=True, valid=False, http=fav_http)
+        else:
+            favicon = favicon._replace(reachable=False, valid=False, http=fav_http)
 
-    width = height = 0
-    if img is not None:
-        width, height = img.size
-
-    return width, height
+    return favicon
 
 
 def guess_missing_sizes(
@@ -590,36 +303,16 @@ def guess_missing_sizes(
     """
     favs = list(favicons)
 
-    for idx in range(len(favs)):
+    len_favs = len(favs)
+    for idx in range(len_favs):
         if favs[idx].url[:5] == "data:" and load_base64_img is True:
-            data_img = favs[idx].url.split(",")
-            suffix = (
-                data_img[0]
-                .replace("data:", "")
-                .replace(";base64", "")
-                .replace("image", "")
-                .replace("/", "")
-                .lower()
-            )
+            favs[idx] = _load_base64_img(favs[idx])
+        else:
+            favs[idx] = guess_size(favs[idx], chunk_size=chunk_size)
 
-            if suffix == "svg+xml":
-                suffix = "svg"
-
-            bytes_content = base64.b64decode(data_img[1])
-            img, is_valid = _load_image(bytes_content)
-
-            if is_valid is True and img is not None:
-                width, height = img.size
-                favs[idx] = favs[idx]._replace(width=width, height=height)
-
-        elif (
-            favs[idx].url[:5] != "data:"
-            and (favs[idx].width == 0 or favs[idx].height == 0)
-            and (favs[idx].reachable is None or favs[idx].reachable is True)
-        ):
-            width, height = guess_size(favs[idx], chunk_size=chunk_size)
-            favs[idx] = favs[idx]._replace(width=width, height=height)
-            time.sleep(sleep_time)
+            # Skip sleep when last iteration
+            if idx < len_favs - 1:
+                time.sleep(sleep_time)
 
     return favs
 
@@ -627,6 +320,7 @@ def guess_missing_sizes(
 def check_availability(
     favicons: Union[list[Favicon], set[Favicon]],
     sleep_time: int = 1,
+    force: bool = False,
     client: Optional[Client] = None,
 ) -> list[Favicon]:
     """
@@ -645,6 +339,7 @@ def check_availability(
         favicons: A collection of `Favicon` objects to check for availability.
         sleep_time: Number of seconds to sleep between each availability check to
             control request rate. Defaults to 1.
+        force: Check again the availability even if it has already been checked.
         client: A custom client instance from `reachable` package to use for performing
             the HTTP request. If None, a default client configuration is used.
 
@@ -654,16 +349,35 @@ def check_availability(
     """
     favs = list(favicons)
 
+    len_favs = len(favs)
     for idx in range(len(favs)):
+        # If the favicon is already reachable, we save a request and skip it
+        if favs[idx].reachable is True and force is False:
+            continue
+        elif favs[idx].url[:5] == "data:":
+            favs[idx] = favs[idx]._replace(reachable=True)
+            continue
+
         result = is_reachable(favs[idx].url, head_optim=True, client=client)
 
+        fav_http = FaviconHttp(
+            original_url=favs[idx].url,
+            final_url=result.get("final_url", favs[idx].url),
+            redirected="redirect" in result,
+            status_code=result.get("status_code", -1),
+        )
+
         if result["success"] is True:
-            favs[idx] = favs[idx]._replace(reachable=True)
+            favs[idx] = favs[idx]._replace(reachable=True, http=fav_http)
+        else:
+            favs[idx] = favs[idx]._replace(reachable=False, http=fav_http)
 
         # If has been redirected
         if "redirect" in result:
             favs[idx] = favs[idx]._replace(url=result.get("final_url", favs[idx].url))
 
-        time.sleep(sleep_time)
+        # Wait before next request to avoid detection but skip it for the last item
+        if idx < len_favs - 1:
+            time.sleep(sleep_time)
 
     return favs
