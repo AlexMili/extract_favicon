@@ -156,6 +156,9 @@ When you install `extract_favicon` it comes with the following dependencies:
 * <a href="https://github.com/tiran/defusedxml" target="_blank"><code>DefusedXML</code></a> - to parse and check validity of SVG files.
 * <a href="https://github.com/john-kurkowski/tldextract" target="_blank"><code>TLDextract</code></a> - to parse and extract domain information from URL.
 
+## Inspiration
+This library is an extension of the [favicon](https://github.com/scottwernervt/favicon/) package.
+
 ## License
 
 This project is licensed under the terms of the MIT license.
