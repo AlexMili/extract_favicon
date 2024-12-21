@@ -1,11 +1,21 @@
 import os.path as osp
 
-from .main import check_availability, download, from_html, from_url, guess_missing_sizes
+from .main import (
+    check_availability,
+    download,
+    from_duckduckgo,
+    from_google,
+    from_html,
+    from_url,
+    guess_missing_sizes,
+)
 
 
 __all__ = [
     "check_availability",
     "download",
+    "from_duckduckgo",
+    "from_google",
     "from_html",
     "from_url",
     "guess_missing_sizes",

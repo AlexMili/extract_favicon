@@ -17,6 +17,8 @@ Key features include:
 * **Size Guessing**: Dynamically determines favicon dimensions, even for images lacking explicit size information, by partially downloading and parsing their headers.
 * **Base64 Support**: Easily handles inline data URLs, decoding base64-encoded images and validating them on-the-fly.
 * **Availability Checks**: Validates each favicon’s URL, following redirects and marking icons as reachable or not.
+* **DuckDuckGo Support**: Downloads Favicon directly from DuckDuckGo's public favicon API.
+* **Google Support**: Downloads Favicon directly from Google's public favicon API.
 * **Async Support**: Offers asynchronous methods (via `asyncio`) to efficiently handle multiple favicon extractions concurrently, enhancing overall performance when dealing with numerous URLs.
 
 ## Installation

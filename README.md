@@ -17,6 +17,8 @@ Key features include:
 * **Size Guessing**: Dynamically determines favicon dimensions, even for images lacking explicit size information, by partially downloading and parsing their headers.
 * **Base64 Support**: Easily handles inline data URLs, decoding base64-encoded images and validating them on-the-fly.
 * **Availability Checks**: Validates each favicon’s URL, following redirects and marking icons as reachable or not.
+* **DuckDuckGo Support**: Downloads Favicon directly from DuckDuckGo's public favicon API.
+* **Google Support**: Downloads Favicon directly from Google's public favicon API.
 * **Async Support**: Offers asynchronous methods (via `asyncio`) to efficiently handle multiple favicon extractions concurrently, enhancing overall performance when dealing with numerous URLs.
 
 ## Installation
@@ -55,27 +57,6 @@ Download extracted favicons:
 >>> import extract_favicon
 >>> favicons = extract_favicon.from_html(my_html, root_url="https://www.python.org/static/")
 >>> favicons_obj = extract_favicon.download(favicons)
-[
-    RealFavicon(
-        url=FaviconURL(
-            url="https://www.python.org/static/apple-touch-icon-precomposed.png",
-            final_url="https://www.python.org/static/apple-touch-icon-precomposed.png",
-            redirected=False,
-            status_code=200,
-        ),
-        format="png",
-        valid=True,
-        original=Favicon(
-            url="https://www.python.org/static/apple-touch-icon-precomposed.png",
-            format="png",
-            width=0,
-            height=0,
-        ),
-        image=<PIL.PngImagePlugin.PngImageFile image mode=RGBA size=57x57>,
-        width=57,
-        height=57,
-    )
-]
 ```
 
 

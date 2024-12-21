@@ -2,6 +2,7 @@ import pytest
 
 import extract_favicon
 from extract_favicon import main_async as ef_async
+from extract_favicon.config import Favicon
 
 
 def test_url(python_url):
@@ -41,3 +42,37 @@ async def test_unreachable_url_async():
     favicons = await ef_async.from_url(url)
     assert isinstance(favicons, set) is True
     assert len(favicons) == 0
+
+
+def test_duckduckgo():
+    url = "https://www.google.com"
+    favicon = extract_favicon.from_duckduckgo(url)
+    assert isinstance(favicon, Favicon) is True
+    assert favicon.format == "ico"
+    assert favicon.reachable is True
+    assert favicon.width == favicon.height == 32
+
+
+def test_duckduckgo_fail():
+    url = "https://somerandome.trustlist.ai"
+    favicon = extract_favicon.from_duckduckgo(url)
+    assert isinstance(favicon, Favicon) is True
+    assert favicon.reachable is False
+    assert favicon.width == favicon.height == 0
+
+
+def test_google():
+    url = "https://www.google.com"
+    favicon = extract_favicon.from_google(url)
+    assert isinstance(favicon, Favicon) is True
+    assert favicon.format == "png"
+    assert favicon.reachable is True
+    assert favicon.width == favicon.height == 128
+
+
+def test_google_fail():
+    url = "https://somerandome.trustlist.ai"
+    favicon = extract_favicon.from_google(url)
+    assert isinstance(favicon, Favicon) is True
+    assert favicon.reachable is False
+    assert favicon.width == favicon.height == 0

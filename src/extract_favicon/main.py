@@ -4,6 +4,7 @@ from typing import Optional, Union
 from urllib.parse import urljoin, urlparse
 
 import httpx
+import tldextract
 from bs4 import BeautifulSoup
 from bs4.element import Tag
 from PIL import ImageFile
@@ -148,12 +149,52 @@ def from_url(
     return favicons
 
 
+def from_duckduckgo(url: str, client: Optional[Client] = None) -> Favicon:
+    """
+    Retrieves a website's favicon via DuckDuckGo's Favicon public API.
+
+    This function uses `tldextract` to parse the given URL and constructs a DuckDuckGo
+    favicon URL using the top-level domain. It then fetch and populate a `Favicon`
+    object with any available metadata (e.g., width, height and reachability).
+
+    Args:
+        url: The target website URL.
+        client: A custom HTTP client to use for the request
+
+    Returns:
+        A `Favicon` object containing favicon data.
+    """
+    tld = tldextract.extract(url)
+    duckduckgo_url = f"https://icons.duckduckgo.com/ip3/{tld.fqdn}.ico"
+
+    favicon = Favicon(duckduckgo_url)
+    favicon = load_image(favicon, client=client)
+
+    return favicon
 
 
+def from_google(url: str, client: Optional[Client] = None, size: int = 256) -> Favicon:
+    """
+    Retrieves a website's favicon via Google's Favicon public API.
 
+    This function uses `tldextract` to parse the given URL and constructs a Google
+    favicon URL using the top-level domain. It then fetch and populate a `Favicon`
+    object with any available metadata (e.g., width, height and reachability).
 
+    Args:
+        url: The target website URL.
+        client: A custom HTTP client to use for the request
 
+    Returns:
+        A `Favicon` object containing favicon data.
+    """
+    tld = tldextract.extract(url)
+    google_url = f"https://t2.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://{tld.fqdn}&size={size}"
 
+    favicon = Favicon(google_url)
+    favicon = load_image(favicon, client=client)
+
+    return favicon
 
 
 def download(

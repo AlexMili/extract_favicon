@@ -2,6 +2,7 @@ import asyncio
 from typing import Optional, Union
 
 import httpx
+import tldextract
 from PIL import ImageFile
 from reachable import is_reachable_async
 from reachable.client import AsyncClient
@@ -30,6 +31,28 @@ async def from_url(
         favicons = set()
 
     return favicons
+
+
+async def from_duckduckgo(url: str, client: Optional[AsyncClient] = None) -> Favicon:
+    tld = tldextract.extract(url)
+    duckduckgo_url = f"https://icons.duckduckgo.com/ip3/{tld.fqdn}.ico"
+
+    favicon = Favicon(duckduckgo_url)
+    favicon = await load_image_async(favicon, client=client)
+
+    return favicon
+
+
+async def from_google(
+    url: str, client: Optional[AsyncClient] = None, size: int = 256
+) -> Favicon:
+    tld = tldextract.extract(url)
+    google_url = f"https://t2.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://{tld.fqdn}&size={size}"
+
+    favicon = Favicon(google_url)
+    favicon = await load_image_async(favicon, client=client)
+
+    return favicon
 
 
 async def download(
