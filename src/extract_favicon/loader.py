@@ -145,18 +145,19 @@ def _load_base64_img(favicon: Favicon, force: bool = False) -> Favicon:
         if suffix == "svg+xml":
             suffix = "svg"
 
-        bytes_content = base64.b64decode(data_img[1])
-        img, is_valid = _open_and_verify_image(bytes_content)
-        width, height, img_format = _get_meta_image(img)
+        if len(data_img) > 1:
+            bytes_content = base64.b64decode(data_img[1])
+            img, is_valid = _open_and_verify_image(bytes_content)
+            width, height, img_format = _get_meta_image(img)
 
-        favicon = favicon._replace(
-            width=width,
-            height=height,
-            format=img_format,
-            valid=is_valid,
-            image=img,
-            reachable=True,
-        )
+            favicon = favicon._replace(
+                width=width,
+                height=height,
+                format=img_format,
+                valid=is_valid,
+                image=img,
+                reachable=len(data_img[1]) > 0,
+            )
 
     return favicon
 

@@ -75,6 +75,23 @@ async def test_base64_async(base64_img):
     assert favicons[0].height == 1
 
 
+@pytest.mark.parametrize(
+    "url,is_valid",
+    [("data:image/png;base64,", False), ("data:;base64,", False), ("data:", None)],
+    ids=["No img data", "No format data", "Only data"],
+)
+def test_base64_wrong(url, is_valid):
+    fav = Favicon(url, format=None, width=0, height=0)
+    fav = extract_favicon.loader._load_base64_img(fav)
+    assert fav.url == fav.url
+    assert fav.format is None
+    assert fav.http is None
+    assert fav.valid is is_valid
+    assert fav.image is None
+    assert fav.width == 0
+    assert fav.height == 0
+
+
 def test_svg(svg_url):
     fav = Favicon(svg_url, format=None, width=0, height=0)
     favicons = extract_favicon.download([fav])
