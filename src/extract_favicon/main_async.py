@@ -276,6 +276,7 @@ async def get_best_favicon(
     html: Optional[Union[str, bytes]] = None,
     client: Optional[AsyncClient] = None,
     strategy: list[str] = ["content", "duckduckgo", "google", "generate"],
+    include_fallbacks: bool = True,
 ) -> Optional[Favicon]:
     favicon = None
 
@@ -288,10 +289,14 @@ async def get_best_favicon(
 
             if html is not None and len(html) > 0:
                 favicons = from_html(
-                    str(html), root_url=_get_root_url(url), include_fallbacks=True
+                    str(html),
+                    root_url=_get_root_url(url),
+                    include_fallbacks=include_fallbacks,
                 )
             else:
-                favicons = await from_url(url, include_fallbacks=True, client=client)
+                favicons = await from_url(
+                    url, include_fallbacks=include_fallbacks, client=client
+                )
 
             favicons_data = await guess_missing_sizes(favicons, load_base64_img=True)
             favicons_data = await check_availability(favicons_data, client=client)

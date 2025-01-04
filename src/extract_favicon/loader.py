@@ -161,6 +161,8 @@ def _load_base64_img(favicon: Favicon, force: bool = False) -> Favicon:
                 image=img,
                 reachable=len(data_img[1]) > 0,
             )
+        else:
+            favicon = favicon._replace(valid=False)
 
     return favicon
 

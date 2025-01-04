@@ -489,6 +489,7 @@ def get_best_favicon(
     html: Optional[Union[str, bytes]] = None,
     client: Optional[Client] = None,
     strategy: list[str] = ["content", "duckduckgo", "google", "generate"],
+    include_fallbacks: bool = True,
 ) -> Optional[Favicon]:
     """
     Attempts to retrieve the best favicon for a given URL using multiple strategies.
@@ -509,6 +510,7 @@ def get_best_favicon(
         client: Optional HTTP client to use for network requests.
         strategy: A list of strategy names to attempt in sequence. Defaults to
             ["content", "duckduckgo", "google", "generate"].
+        include_fallbacks: check for fallbacks URL for `content` strategy.
 
     Returns:
         The best found favicon if successful, otherwise None.
@@ -527,10 +529,14 @@ def get_best_favicon(
 
             if html is not None and len(html) > 0:
                 favicons = from_html(
-                    str(html), root_url=_get_root_url(url), include_fallbacks=True
+                    str(html),
+                    root_url=_get_root_url(url),
+                    include_fallbacks=include_fallbacks,
                 )
             else:
-                favicons = from_url(url, include_fallbacks=True, client=client)
+                favicons = from_url(
+                    url, include_fallbacks=include_fallbacks, client=client
+                )
 
             favicons_data = guess_missing_sizes(favicons, load_base64_img=True)
             favicons_data = check_availability(favicons_data, client=client)
