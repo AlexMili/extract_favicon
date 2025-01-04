@@ -145,6 +145,8 @@ def _load_base64_img(favicon: Favicon, force: bool = False) -> Favicon:
 
         if suffix == "svg+xml":
             suffix = "svg"
+        elif suffix == "vnd.microsoft.icon":
+            suffix = "ico"
 
         if len(data_img) > 1:
             bytes_content = base64.b64decode(data_img[1])
