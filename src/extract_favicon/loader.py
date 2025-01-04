@@ -98,18 +98,19 @@ def _open_and_verify_image(bytes_content: bytes) -> Tuple[Optional[Image.Image],
     is_valid: bool = False
     img: Optional[Image.Image] = None
 
-    try:
-        bytes_stream = io.BytesIO(bytes_content)
-        img = Image.open(bytes_stream)
-        img.verify()
-        is_valid = True
-        # Since verify() closes the file cursor, we open it again for further processing
-        img = Image.open(bytes_stream)
-    except UnidentifiedImageError:
-        is_valid = False
-    except OSError as e:  # noqa
-        # Usually malformed images
-        is_valid = False
+    if len(bytes_content) > 0:
+        try:
+            bytes_stream = io.BytesIO(bytes_content)
+            img = Image.open(bytes_stream)
+            img.verify()
+            is_valid = True
+            # Since verify() closes the file cursor, we open it again for further processing
+            img = Image.open(bytes_stream)
+        except UnidentifiedImageError:
+            is_valid = False
+        except OSError as e:  # noqa
+            # Usually malformed images
+            is_valid = False
 
     return img, is_valid
 
