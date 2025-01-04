@@ -1,6 +1,7 @@
 import asyncio
 from typing import Optional, Union
 
+import httpx
 import tldextract
 from PIL import ImageFile
 from reachable import is_reachable_async
@@ -144,42 +145,58 @@ async def guess_size(
     else:
         close_client = False
 
-    async with client.stream("GET", favicon.url) as response:
+    try:
+        async with client.stream("GET", favicon.url) as response:
+            fav_http = FaviconHttp(
+                original_url=favicon.url,
+                final_url=str(response.url),
+                redirected=favicon.url != str(response.url),
+                status_code=response.status_code,
+            )
+
+            if (
+                200 <= response.status_code < 300
+                and "content-type" in response.headers
+                and "image" in response.headers["content-type"]
+            ):
+                favicon = favicon._replace(reachable=True, http=fav_http)
+
+                bytes_parsed: int = 0
+                max_bytes_parsed: int = 2048
+                chunk_size = 512
+                parser = ImageFile.Parser()
+
+                async for chunk in response.aiter_bytes(chunk_size=chunk_size):
+                    bytes_parsed += chunk_size
+                    # partial_data += chunk
+
+                    parser.feed(chunk)
+
+                    if parser.image is not None or bytes_parsed > max_bytes_parsed:
+                        img = parser.image
+                        if img is not None:
+                            width, height = img.size
+                            favicon = favicon._replace(width=width, height=height)
+                        break
+            elif 200 <= response.status_code < 300:
+                # No "image" content-type so we put valid=False
+                favicon = favicon._replace(reachable=True, valid=False, http=fav_http)
+            else:
+                favicon = favicon._replace(reachable=False, valid=False, http=fav_http)
+    except (
+        httpx.ConnectError,
+        httpx.ConnectTimeout,
+        httpx.ReadTimeout,
+        httpx.RemoteProtocolError,
+        httpx.ReadError,
+    ):
         fav_http = FaviconHttp(
             original_url=favicon.url,
-            final_url=str(response.url),
-            redirected=favicon.url != str(response.url),
-            status_code=response.status_code,
+            final_url=favicon.url,
+            redirected=False,
+            status_code=-1,
         )
-
-        if (
-            200 <= response.status_code < 300
-            and "image" in response.headers["content-type"]
-        ):
-            favicon = favicon._replace(reachable=True, http=fav_http)
-
-            bytes_parsed: int = 0
-            max_bytes_parsed: int = 2048
-            chunk_size = 512
-            parser = ImageFile.Parser()
-
-            async for chunk in response.aiter_bytes(chunk_size=chunk_size):
-                bytes_parsed += chunk_size
-                # partial_data += chunk
-
-                parser.feed(chunk)
-
-                if parser.image is not None or bytes_parsed > max_bytes_parsed:
-                    img = parser.image
-                    if img is not None:
-                        width, height = img.size
-                        favicon = favicon._replace(width=width, height=height)
-                    break
-        elif 200 <= response.status_code < 300:
-            # No "image" content-type so we put valid=False
-            favicon = favicon._replace(reachable=True, valid=False, http=fav_http)
-        else:
-            favicon = favicon._replace(reachable=False, valid=False, http=fav_http)
+        favicon = favicon._replace(reachable=False, valid=False, http=fav_http)
 
     if close_client is True:
         await client.close()
