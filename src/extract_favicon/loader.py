@@ -141,14 +141,13 @@ def _load_base64_img(favicon: Favicon, force: bool = False) -> Favicon:
             .replace("image", "")
             .replace("/", "")
             .lower()
+            .strip()
         )
 
-        if suffix == "svg+xml":
-            suffix = "svg"
-        elif suffix == "vnd.microsoft.icon":
-            suffix = "ico"
-
-        if len(data_img) > 1:
+        if len(data_img) > 1 and suffix in ["svg", "svg+xml"]:
+            bytes_content = base64.b64decode(data_img[1])
+            favicon = _load_svg_img(favicon, bytes_content)
+        elif len(data_img) > 1:
             bytes_content = base64.b64decode(data_img[1])
             img, is_valid = _open_and_verify_image(bytes_content)
             width, height, img_format = _get_meta_image(img)

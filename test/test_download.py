@@ -77,7 +77,7 @@ async def test_base64_async(base64_img):
 
 @pytest.mark.parametrize(
     "url,is_valid",
-    [("data:image/png;base64,", False), ("data:;base64,", False), ("data:", None)],
+    [("data:image/png;base64,", False), ("data:;base64,", False), ("data:", False)],
     ids=["No img data", "No format data", "Only data"],
 )
 def test_base64_wrong(url, is_valid):
