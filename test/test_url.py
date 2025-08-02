@@ -67,7 +67,7 @@ def test_google():
     assert isinstance(favicon, Favicon) is True
     assert favicon.format == "png"
     assert favicon.reachable is True
-    assert favicon.width == favicon.height == 128
+    assert favicon.width == favicon.height == 256
 
 
 def test_google_fail():
