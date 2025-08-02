@@ -1,3 +1,5 @@
+from typing import Any
+
 import pytest
 from PIL import Image
 
@@ -7,7 +9,7 @@ from extract_favicon.main import Favicon
 
 
 @pytest.fixture(scope="function")
-def favicons():
+def favicons() -> Any:
     return {
         Favicon(
             url="https://www.python.org/static/apple-touch-icon-144x144-precomposed.png",
@@ -48,7 +50,7 @@ def favicons():
     }
 
 
-def test_base64(base64_img):
+def test_base64(base64_img: str) -> None:
     fav = Favicon(base64_img, format=None, width=0, height=0)
     favicons = extract_favicon.download([fav])
     assert len(favicons) == 1
@@ -62,7 +64,7 @@ def test_base64(base64_img):
 
 
 @pytest.mark.asyncio
-async def test_base64_async(base64_img):
+async def test_base64_async(base64_img: str) -> None:
     fav = Favicon(base64_img, format=None, width=0, height=0)
     favicons = await ef_async.download([fav])
     assert len(favicons) == 1
@@ -80,7 +82,7 @@ async def test_base64_async(base64_img):
     [("data:image/png;base64,", False), ("data:;base64,", False), ("data:", False)],
     ids=["No img data", "No format data", "Only data"],
 )
-def test_base64_wrong(url, is_valid):
+def test_base64_wrong(url: str, is_valid: bool) -> None:
     fav = Favicon(url, format=None, width=0, height=0)
     fav = extract_favicon.loader._load_base64_img(fav)
     assert fav.url == fav.url
@@ -92,7 +94,7 @@ def test_base64_wrong(url, is_valid):
     assert fav.height == 0
 
 
-def test_svg(svg_url):
+def test_svg(svg_url: str) -> None:
     fav = Favicon(svg_url, format=None, width=0, height=0)
     favicons = extract_favicon.download([fav])
     assert len(favicons) == 1
@@ -106,7 +108,7 @@ def test_svg(svg_url):
 
 
 @pytest.mark.asyncio
-async def test_svg_async(svg_url):
+async def test_svg_async(svg_url: str) -> None:
     fav = Favicon(svg_url, format=None, width=0, height=0)
     favicons = await ef_async.download([fav])
     assert len(favicons) == 1
@@ -119,7 +121,7 @@ async def test_svg_async(svg_url):
     assert favicons[0].height == 600
 
 
-def test_gif(gif_url):
+def test_gif(gif_url: str) -> None:
     fav = Favicon(gif_url, format=None, width=0, height=0)
     favicons = extract_favicon.download([fav])
     assert len(favicons) == 1
@@ -133,7 +135,7 @@ def test_gif(gif_url):
 
 
 @pytest.mark.asyncio
-async def test_gif_async(gif_url):
+async def test_gif_async(gif_url: str) -> None:
     fav = Favicon(gif_url, format=None, width=0, height=0)
     favicons = await ef_async.download([fav])
     assert len(favicons) == 1
@@ -151,7 +153,7 @@ async def test_gif_async(gif_url):
     [("all", 6), ("largest", 1), ("smallest", 1)],
     ids=["All mode", "Largest mode", "Smallest mode"],
 )
-def test_mode(favicons, mode, expected_len):
+def test_mode(favicons: Any, mode: str, expected_len: int) -> None:
     favs = extract_favicon.download(favicons, mode=mode)
     assert len(favs) == expected_len
 
@@ -162,12 +164,12 @@ def test_mode(favicons, mode, expected_len):
     ids=["All mode", "Largest mode", "Smallest mode"],
 )
 @pytest.mark.asyncio
-async def test_mode_async(favicons, mode, expected_len):
+async def test_mode_async(favicons: Any, mode: str, expected_len: int) -> None:
     favs = await ef_async.download(favicons, mode=mode)
     assert len(favs) == expected_len
 
 
-def test_generate_default():
+def test_generate_default() -> None:
     url = "https://www.trustlist.ai/"
     favicon = extract_favicon.generate_favicon(url)
 
@@ -208,7 +210,9 @@ def test_generate_default():
         "Default strategy unknown domain",
     ],
 )
-def test_best_favicon(url, strategy, img_format, width, height):
+def test_best_favicon(
+    url: str, strategy: str, img_format: str, width: int, height: int
+) -> None:
     favicon = extract_favicon.get_best_favicon(url, strategy=strategy)
 
     assert favicon is not None

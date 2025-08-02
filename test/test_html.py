@@ -1,3 +1,5 @@
+from typing import Tuple
+
 import pytest
 
 import extract_favicon
@@ -30,7 +32,7 @@ HTML: str = """
         "apple-touch-icon-precomposed",
     ],
 )
-def test_link_tag(tag: str):
+def test_link_tag(tag: str) -> None:
     favicons = extract_favicon.from_html(HTML.replace("%content%", tag))
     assert len(favicons) == 1
 
@@ -61,7 +63,7 @@ def test_link_tag(tag: str):
         "Uppercase X",
     ],
 )
-def test_link_tag_sizes_attribute(tag, size):
+def test_link_tag_sizes_attribute(tag: str, size: Tuple[int, int]) -> None:
     favicons = extract_favicon.from_html(HTML.replace("%content%", tag))
     assert len(favicons) == 1
     icon = favicons.pop()
@@ -99,7 +101,7 @@ def test_link_tag_sizes_attribute(tag, size):
         "query string",
     ],
 )
-def test_link_tag_href_attribute(tag, url):
+def test_link_tag_href_attribute(tag: str, url: str) -> None:
     favicons = extract_favicon.from_html(HTML.replace("%content%", tag), root_url=url)
     assert len(favicons) == 1
     assert favicons.pop().url == url
@@ -114,7 +116,7 @@ def test_link_tag_href_attribute(tag, url):
         "Malformed icon size",
     ],
 )
-def test_malformed_link(tag):
+def test_malformed_link(tag: str) -> None:
     favicons = extract_favicon.from_html(HTML.replace("%content%", tag))
     assert len(favicons) == 1
 
@@ -130,7 +132,7 @@ def test_malformed_link(tag):
         "No href",
     ],
 )
-def test_link_tag_empty_href_attribute(tag):
+def test_link_tag_empty_href_attribute(tag: str) -> None:
     favicons = extract_favicon.from_html(HTML.replace("%content%", tag))
     assert len(favicons) == 0
 
@@ -143,7 +145,7 @@ def test_link_tag_empty_href_attribute(tag):
     ],
     ids=["msapplication-TileImage", "msapplication-tileimage"],
 )
-def test_meta_tag(tag):
+def test_meta_tag(tag: str) -> None:
     favicons = extract_favicon.from_html(HTML.replace("%content%", tag))
     assert len(favicons) == 1
 
@@ -157,7 +159,7 @@ def test_meta_tag(tag):
     ],
     ids=["Missing meta", "Empty meta str length 0", "Empty meta content"],
 )
-def test_invalid_meta_tag(tag):
+def test_invalid_meta_tag(tag: str) -> None:
     favicons = extract_favicon.from_html(HTML.replace("%content%", tag))
     assert len(favicons) == 0
 
@@ -169,7 +171,7 @@ def test_invalid_meta_tag(tag):
     ],
     ids=["Base64 image"],
 )
-def test_base64(tag):
+def test_base64(tag: str) -> None:
     favicons = extract_favicon.from_html(HTML.replace("%content%", tag))
     assert len(favicons) == 1
     favicon = favicons.pop()
@@ -188,14 +190,14 @@ def test_base64(tag):
         "Base tag with relative icon",
     ],
 )
-def test_base_tag_link(tag):
+def test_base_tag_link(tag: str) -> None:
     favicons = extract_favicon.from_html(HTML.replace("%content%", tag))
     assert len(favicons) == 1
     favicon = favicons.pop()
     assert favicon.url == "http://example.com/favicon.jpg"
 
 
-def test_empty():
+def test_empty() -> None:
     favicons = extract_favicon.from_html(
         HTML.replace("%content%", ""), include_fallbacks=True
     )
