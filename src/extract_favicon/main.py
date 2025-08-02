@@ -1,6 +1,6 @@
 import os
 import time
-from typing import Optional, Union
+from typing import Optional, Union, cast, Set
 from urllib.parse import urljoin, urlparse
 
 import httpx
@@ -13,7 +13,7 @@ from reachable.client import Client
 
 from .config import FALLBACKS, LINK_TAGS, META_TAGS, STRATEGIES, Favicon, FaviconHttp
 from .loader import _load_base64_img, _load_svg_img, load_image
-from .utils import _get_dimension, _get_root_url, _has_content, _is_absolute
+from .utils import _get_dimension, _get_root_url, _has_content, _is_absolute, _get_tag_elt
 
 
 def from_html(
@@ -37,29 +37,31 @@ def from_html(
     # We priorize user's value for root_url over base tag
     base_tag = page.find("base", href=True)
     if base_tag is not None and root_url is None:
-        root_url = base_tag["href"]
+        root_url = _get_tag_elt(cast(Tag, base_tag), "href")
 
-    tags: set[Tag] = set()
+    tags: Set[Tag] = set()
     for rel in LINK_TAGS:
         for link_tag in page.find_all(
             "link",
             attrs={"rel": lambda r: _has_content(r) and r.lower() == rel, "href": True},
         ):
-            tags.add(link_tag)
+            if isinstance(link_tag, Tag):
+                tags.add(link_tag)
 
-    for tag in META_TAGS:
+    for meta in META_TAGS:
         for meta_tag in page.find_all(
             "meta",
             attrs={
-                "name": lambda n: _has_content(n) and n.lower() == tag.lower(),
+                "name": lambda n: _has_content(n) and n.lower() == meta.lower(),
                 "content": True,
             },
         ):
-            tags.add(meta_tag)
+            if isinstance(meta_tag, Tag):
+                tags.add(meta_tag)
 
     favicons = set()
     for tag in tags:
-        href = tag.get("href") or tag.get("content") or ""  # type: ignore
+        href = _get_tag_elt(tag, "href") or _get_tag_elt(tag, "content") or ""
         href = href.strip()
 
         # We skip if there is not content in href
@@ -83,13 +85,13 @@ def from_html(
             continue
         elif root_url is not None:
             if _is_absolute(href) is True:
-                url_parsed = href
+                url = href
             else:
-                url_parsed = urljoin(root_url, href)
+                url = urljoin(root_url, href)
 
             # Repair '//cdn.network.com/favicon.png' or `icon.png?v2`
             scheme = urlparse(root_url).scheme
-            url_parsed = urlparse(url_parsed, scheme=scheme)
+            url_parsed = urlparse(url, scheme=scheme)
         else:
             url_parsed = urlparse(href)
 

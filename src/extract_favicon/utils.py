@@ -1,8 +1,8 @@
 import re
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Union
 from urllib.parse import urlparse, urlunparse
 
-from bs4.element import Tag
+from bs4.element import Tag, AttributeValueList
 
 from .config import SIZE_RE, Favicon
 
@@ -35,6 +35,18 @@ def _is_absolute(url: str) -> bool:
     return _has_content(urlparse(url).netloc)
 
 
+def _get_tag_elt(tag: Tag, element: str) -> Union[str, None]:
+    elt = tag.get(element)
+    elt_str: Union[str, None] = None
+
+    if isinstance(elt, AttributeValueList):
+        elt_str = " ".join(elt)
+    elif elt is not None:
+        elt_str = elt
+
+    return elt_str
+
+
 def _get_dimension(tag: Tag) -> Tuple[int, int]:
     """Get icon dimensions from size attribute or icon filename.
 
@@ -44,14 +56,16 @@ def _get_dimension(tag: Tag) -> Tuple[int, int]:
     Returns:
         If found, width and height, else (0,0).
     """
-    sizes = tag.get("sizes", "")
-    if sizes and sizes != "any":
+    sizes = _get_tag_elt(tag, "sizes")
+
+    if sizes and sizes.lower() != "any":
         # "16x16 32x32 64x64"
-        size = sizes.split(" ")
-        size.sort(reverse=True)
-        width, height = re.split(r"[x\xd7]", size[0], flags=re.I)
+        choices = sizes.split(" ")
+        choices.sort(reverse=True)
+        width, height = re.split(r"[x\xd7]", choices[0], flags=re.I)
     else:
-        filename = tag.get("href") or tag.get("content") or ""
+        filename = _get_tag_elt(tag, "href") or _get_tag_elt(tag, "content") or ""
+
         size = SIZE_RE.search(filename)
         if size:
             width, height = size.group("width"), size.group("height")
