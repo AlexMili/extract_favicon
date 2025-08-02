@@ -16,10 +16,10 @@ classifiers = [
 ]
 keywords = []
 dependencies = [
-    "beautifulsoup4",
+    "beautifulsoup4 >= 4.13.0",
     "pillow",
-    "reachable==0.7.0",
-    "defusedxml",
+    "reachable >= 0.9.0",
+    "defusedxml >= 0.7.1",
     "tldextract",
 ]
 

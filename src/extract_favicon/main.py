@@ -13,7 +13,13 @@ from reachable.client import Client
 
 from .config import FALLBACKS, LINK_TAGS, META_TAGS, STRATEGIES, Favicon, FaviconHttp
 from .loader import _load_base64_img, _load_svg_img, load_image
-from .utils import _get_dimension, _get_root_url, _has_content, _is_absolute, _get_tag_elt
+from .utils import (
+    _get_dimension,
+    _get_root_url,
+    _has_content,
+    _is_absolute,
+    _get_tag_elt,
+)
 
 
 def from_html(
