@@ -18,7 +18,7 @@ keywords = []
 dependencies = [
     "beautifulsoup4 >= 4.13.0",
     "pillow",
-    "reachable >= 0.9.0",
+    "reachable >= 0.9.1",
     "defusedxml >= 0.7.1",
     "tldextract",
 ]
