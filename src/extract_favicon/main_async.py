@@ -11,7 +11,7 @@ from extract_favicon.main import from_html, generate_favicon
 
 from .config import STRATEGIES, Favicon, FaviconHttp
 from .loader import _load_base64_img, load_image_async
-from .utils import _get_root_url
+from .utils import _get_root_url, _largest_ico_from_header
 
 
 async def from_url(
@@ -161,14 +161,30 @@ async def guess_size(
             ):
                 favicon = favicon._replace(reachable=True, http=fav_http)
 
+                buf = bytearray()
                 bytes_parsed: int = 0
                 max_bytes_parsed: int = 2048
                 chunk_size = 512
                 parser = ImageFile.Parser()
 
+                content_type = response.headers.get("content-type", "").lower()
+                is_ico = (
+                    "x-icon" in content_type
+                    or "vnd.microsoft.icon" in content_type
+                    or favicon.format == "ico"
+                )
+
                 async for chunk in response.aiter_bytes(chunk_size=chunk_size):
+                    buf.extend(chunk)
                     bytes_parsed += chunk_size
                     # partial_data += chunk
+
+                    if is_ico is True:
+                        wh = _largest_ico_from_header(buf)
+                        if wh:
+                            w, h = wh
+                            favicon = favicon._replace(width=w, height=h)
+                            break
 
                     parser.feed(chunk)
 
@@ -178,6 +194,14 @@ async def guess_size(
                             width, height = img.size
                             favicon = favicon._replace(width=width, height=height)
                         break
+
+                    # If we still don't have dimensions for an ICO but we read the full directory, try one last time
+                    if is_ico and favicon.width == 0 and favicon.height == 0:
+                        wh = _largest_ico_from_header(buf)
+                        if wh:
+                            w, h = wh
+                            favicon = favicon._replace(width=w, height=h)
+
             elif 200 <= response.status_code < 300:
                 # No "image" content-type so we put valid=False
                 favicon = favicon._replace(reachable=True, valid=False, http=fav_http)
