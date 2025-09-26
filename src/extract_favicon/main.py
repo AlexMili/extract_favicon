@@ -50,7 +50,10 @@ def from_html(
     for rel in LINK_TAGS:
         for link_tag in page.find_all(
             "link",
-            attrs={"rel": lambda r: _has_content(r) and r.lower() == rel, "href": True},
+            attrs={
+                "rel": lambda r: r is not None and _has_content(r) and r.lower() == rel,
+                "href": True,
+            },
         ):
             if isinstance(link_tag, Tag):
                 tags.add(link_tag)
@@ -59,7 +62,9 @@ def from_html(
         for meta_tag in page.find_all(
             "meta",
             attrs={
-                "name": lambda n: _has_content(n) and n.lower() == meta.lower(),
+                "name": lambda n: n is not None
+                and _has_content(n)
+                and n.lower() == meta.lower(),
                 "content": True,
             },
         ):
