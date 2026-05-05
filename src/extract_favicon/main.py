@@ -1,6 +1,6 @@
 import os
 import time
-from typing import Optional, Union, cast, Set
+from typing import Optional, Set, Union
 from urllib.parse import urljoin, urlparse
 
 import httpx
@@ -14,17 +14,26 @@ from reachable.client import Client
 from .config import FALLBACKS, LINK_TAGS, META_TAGS, STRATEGIES, Favicon, FaviconHttp
 from .loader import _load_base64_img, _load_svg_img, load_image
 from .utils import (
+    _apply_reachable_result,
+    _consume_size_chunk,
+    _duckduckgo_url,
     _get_dimension,
     _get_root_url,
     _get_tag_elt,
+    _google_url,
     _has_content,
+    _http_from_reachable,
+    _http_unreachable,
     _is_absolute,
-    _largest_ico_from_header,
+    _is_ico_response,
+    _is_valid_remote_fav,
+    _prepare_download_list,
+    _sort_downloaded,
 )
 
 
 def from_html(
-    html: str,
+    html: Union[str, bytes],
     root_url: Optional[str] = None,
     include_fallbacks: bool = False,
 ) -> set[Favicon]:
@@ -44,7 +53,7 @@ def from_html(
     # We priorize user's value for root_url over base tag
     base_tag = page.find("base", href=True)
     if base_tag is not None and root_url is None:
-        root_url = _get_tag_elt(cast(Tag, base_tag), "href")
+        root_url = _get_tag_elt(base_tag, "href")
 
     tags: Set[Tag] = set()
     for rel in LINK_TAGS:
@@ -178,13 +187,7 @@ def from_duckduckgo(url: str, client: Optional[Client] = None) -> Favicon:
     Returns:
         A `Favicon` object containing favicon data.
     """
-    tld = tldextract.extract(url)
-    duckduckgo_url = f"https://icons.duckduckgo.com/ip3/{tld.fqdn}.ico"
-
-    favicon = Favicon(duckduckgo_url)
-    favicon = load_image(favicon, client=client)
-
-    return favicon
+    return load_image(Favicon(_duckduckgo_url(url)), client=client)
 
 
 def from_google(url: str, client: Optional[Client] = None, size: int = 256) -> Favicon:
@@ -202,13 +205,7 @@ def from_google(url: str, client: Optional[Client] = None, size: int = 256) -> F
     Returns:
         A `Favicon` object containing favicon data.
     """
-    tld = tldextract.extract(url)
-    google_url = f"https://t2.gstatic.com/faviconV2?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL&url=https://{tld.fqdn}&size={size}"
-
-    favicon = Favicon(google_url)
-    favicon = load_image(favicon, client=client)
-
-    return favicon
+    return load_image(Favicon(_google_url(url, size)), client=client)
 
 
 def download(
@@ -237,17 +234,7 @@ def download(
         A list of favicons.
     """
     real_favicons: list[Favicon] = []
-    to_process: list[Favicon] = []
-
-    if include_unknown is False:
-        favicons = list(filter(lambda x: x.width != 0 and x.height != 0, favicons))
-
-    if mode.lower() in ["largest", "smallest"]:
-        to_process = sorted(
-            favicons, key=lambda x: x.width * x.height, reverse=mode == "largest"
-        )
-    else:
-        to_process = list(favicons)
+    to_process = _prepare_download_list(favicons, mode, include_unknown)
 
     len_process = len(to_process)
     for idx, fav in enumerate(to_process):
@@ -264,11 +251,7 @@ def download(
         if idx < len_process - 1:
             time.sleep(sleep_time)
 
-    real_favicons = sorted(
-        real_favicons, key=lambda x: x.width * x.height, reverse=sort.lower() == "desc"
-    )
-
-    return real_favicons
+    return _sort_downloaded(real_favicons, sort)
 
 
 def guess_size(
@@ -309,53 +292,30 @@ def guess_size(
                 status_code=response.status_code,
             )
 
-            if (
-                200 <= response.status_code < 300
-                and "content-type" in response.headers
-                and "image" in response.headers["content-type"]
-            ):
+            content_type = response.headers.get("content-type", "").lower()
+
+            if 200 <= response.status_code < 300 and "image" in content_type:
                 favicon = favicon._replace(reachable=True, http=fav_http)
 
                 buf = bytearray()
                 bytes_parsed: int = 0
                 max_bytes_parsed: int = 2048
-                chunk_size = 512
                 parser = ImageFile.Parser()
-
-                content_type = response.headers.get("content-type", "").lower()
-                is_ico = (
-                    "x-icon" in content_type
-                    or "vnd.microsoft.icon" in content_type
-                    or favicon.format == "ico"
-                )
+                is_ico = _is_ico_response(content_type, favicon.format)
 
                 for chunk in response.iter_bytes(chunk_size=chunk_size):
-                    buf.extend(chunk)
-                    bytes_parsed += chunk_size
-                    # partial_data += chunk
-
-                    if is_ico is True:
-                        wh = _largest_ico_from_header(buf)
-                        if wh:
-                            w, h = wh
-                            favicon = favicon._replace(width=w, height=h)
-                            break
-
-                    parser.feed(chunk)
-
-                    if parser.image is not None or bytes_parsed > max_bytes_parsed:
-                        img = parser.image
-                        if img is not None:
-                            width, height = img.size
-                            favicon = favicon._replace(width=width, height=height)
+                    favicon, bytes_parsed, done = _consume_size_chunk(
+                        favicon,
+                        chunk,
+                        buf,
+                        parser,
+                        bytes_parsed,
+                        chunk_size,
+                        max_bytes_parsed,
+                        is_ico,
+                    )
+                    if done:
                         break
-
-                    # If we still don't have dimensions for an ICO but we read the full directory, try one last time
-                    if is_ico and favicon.width == 0 and favicon.height == 0:
-                        wh = _largest_ico_from_header(buf)
-                        if wh:
-                            w, h = wh
-                            favicon = favicon._replace(width=w, height=h)
 
             elif 200 <= response.status_code < 300:
                 # No "image" content-type so we put valid=False
@@ -369,13 +329,9 @@ def guess_size(
         httpx.RemoteProtocolError,
         httpx.ReadError,
     ):
-        fav_http = FaviconHttp(
-            original_url=favicon.url,
-            final_url=favicon.url,
-            redirected=False,
-            status_code=-1,
+        favicon = favicon._replace(
+            reachable=False, valid=False, http=_http_unreachable(favicon.url)
         )
-        favicon = favicon._replace(reachable=False, valid=False, http=fav_http)
 
     if close_client is True:
         client.close()
@@ -460,7 +416,7 @@ def check_availability(
     favs = list(favicons)
 
     len_favs = len(favs)
-    for idx in range(len(favs)):
+    for idx in range(len_favs):
         # If the favicon is already reachable, we save a request and skip it
         if favs[idx].reachable is True and force is False:
             continue
@@ -469,22 +425,7 @@ def check_availability(
             continue
 
         result = is_reachable(favs[idx].url, head_optim=True, client=client)
-
-        fav_http = FaviconHttp(
-            original_url=favs[idx].url,
-            final_url=result.get("final_url", favs[idx].url),
-            redirected="redirect" in result,
-            status_code=result.get("status_code", -1),
-        )
-
-        if result["success"] is True:
-            favs[idx] = favs[idx]._replace(reachable=True, http=fav_http)
-        else:
-            favs[idx] = favs[idx]._replace(reachable=False, http=fav_http)
-
-        # If has been redirected
-        if "redirect" in result:
-            favs[idx] = favs[idx]._replace(url=result.get("final_url", favs[idx].url))
+        favs[idx] = _apply_reachable_result(favs[idx], result)
 
         # Wait before next request to avoid detection but skip it for the last item
         if idx < len_favs - 1:
@@ -563,11 +504,11 @@ def get_best_favicon(
             raise ValueError(f"{strat} strategy not recognized. Aborting.")
 
         if strat.lower() == "content":
-            favicons = set()
+            favicons: set[Favicon] = set()
 
             if html is not None and len(html) > 0:
                 favicons = from_html(
-                    str(html),
+                    html,
                     root_url=_get_root_url(url),
                     include_fallbacks=include_fallbacks,
                 )
@@ -586,24 +527,12 @@ def get_best_favicon(
 
         elif strat.lower() == "duckduckgo":
             fav = from_duckduckgo(url, client)
-
-            if (
-                fav.reachable is True
-                and fav.valid is True
-                and fav.width > 0
-                and fav.height > 0
-            ):
+            if _is_valid_remote_fav(fav):
                 favicon = fav
 
         elif strat.lower() == "google":
             fav = from_google(url, client)
-
-            if (
-                fav.reachable is True
-                and fav.valid is True
-                and fav.width > 0
-                and fav.height > 0
-            ):
+            if _is_valid_remote_fav(fav):
                 favicon = fav
 
         elif strat.lower() == "generate":

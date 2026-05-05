@@ -1,7 +1,7 @@
 import base64
 import io
 import os
-from typing import Optional, Tuple, Union
+from typing import Any, Optional, Tuple, Union
 from urllib.parse import urlparse
 
 import defusedxml.ElementTree as ETree
@@ -13,68 +13,51 @@ from .config import Favicon, FaviconHttp
 from .utils import _get_url
 
 
-def load_image(favicon: Favicon, client: Optional[Client] = None) -> Favicon:
-    if favicon.url[:5] == "data:":
-        favicon = _load_base64_img(favicon)
-    else:
-        result = is_reachable(
-            favicon.url, head_optim=False, include_response=True, client=client
-        )
+def _finalize_loaded_favicon(favicon: Favicon, result: dict[str, Any]) -> Favicon:
+    """Apply a `reachable` result onto a Favicon, decoding the response body."""
+    fav_http = FaviconHttp(
+        original_url=favicon.url,
+        final_url=result.get("final_url", favicon.url),
+        redirected="redirect" in result,
+        status_code=result.get("status_code", -1),
+    )
 
-        fav_http = FaviconHttp(
-            original_url=favicon.url,
-            final_url=result.get("final_url", favicon.url),
-            redirected="redirect" in result,
-            status_code=result.get("status_code", -1),
-        )
+    favicon = favicon._replace(http=fav_http)
 
-        favicon = favicon._replace(http=fav_http)
+    if result["success"] is True:
+        favicon = favicon._replace(reachable=True)
+        filename = os.path.basename(urlparse(_get_url(favicon)).path)
 
-        if result["success"] is True:
-            favicon = favicon._replace(reachable=True)
-            filename = os.path.basename(urlparse(_get_url(favicon)).path)
-
-            if filename.lower().endswith(".svg") is True:
-                favicon = _load_svg_img(favicon, result["response"].content)
-            else:
-                favicon = _load_img(favicon, result["response"].content)
+        if filename.lower().endswith(".svg") is True:
+            favicon = _load_svg_img(favicon, result["response"].content)
         else:
-            favicon = favicon._replace(reachable=False)
+            favicon = _load_img(favicon, result["response"].content)
+    else:
+        favicon = favicon._replace(reachable=False)
 
     return favicon
+
+
+def load_image(favicon: Favicon, client: Optional[Client] = None) -> Favicon:
+    if favicon.url[:5] == "data:":
+        return _load_base64_img(favicon)
+
+    result = is_reachable(
+        favicon.url, head_optim=False, include_response=True, client=client
+    )
+    return _finalize_loaded_favicon(favicon, result)
 
 
 async def load_image_async(
     favicon: Favicon, client: Optional[AsyncClient] = None
 ) -> Favicon:
     if favicon.url[:5] == "data:":
-        favicon = _load_base64_img(favicon)
-    else:
-        result = await is_reachable_async(
-            favicon.url, head_optim=False, include_response=True, client=client
-        )
+        return _load_base64_img(favicon)
 
-        fav_http = FaviconHttp(
-            original_url=favicon.url,
-            final_url=result.get("final_url", favicon.url),
-            redirected="redirect" in result,
-            status_code=result.get("status_code", -1),
-        )
-
-        favicon = favicon._replace(http=fav_http)
-
-        if result["success"] is True:
-            favicon = favicon._replace(reachable=True)
-            filename = os.path.basename(urlparse(_get_url(favicon)).path)
-
-            if filename.lower().endswith(".svg") is True:
-                favicon = _load_svg_img(favicon, result["response"].content)
-            else:
-                favicon = _load_img(favicon, result["response"].content)
-        else:
-            favicon = favicon._replace(reachable=False)
-
-    return favicon
+    result = await is_reachable_async(
+        favicon.url, head_optim=False, include_response=True, client=client
+    )
+    return _finalize_loaded_favicon(favicon, result)
 
 
 def _open_and_verify_image(bytes_content: bytes) -> Tuple[Optional[Image.Image], bool]:

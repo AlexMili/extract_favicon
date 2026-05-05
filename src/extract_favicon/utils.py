@@ -1,10 +1,12 @@
 import re
-from typing import Optional, Tuple, Union
+from typing import Any, Optional, Tuple, Union
 from urllib.parse import urlparse, urlunparse
 
+import tldextract
 from bs4.element import AttributeValueList, Tag
+from PIL import ImageFile
 
-from .config import SIZE_RE, Favicon
+from .config import SIZE_RE, Favicon, FaviconHttp
 
 
 def _has_content(text: Optional[str]) -> bool:
@@ -110,7 +112,9 @@ def _get_url(fav: Favicon) -> str:
         return fav.url
 
 
-def _largest_ico_from_header(data: bytes) -> Optional[Tuple[int, int]]:
+def _largest_ico_from_header(
+    data: Union[bytes, bytearray],
+) -> Optional[Tuple[int, int]]:
     """
     Return (width, height) of the largest embedded image in an ICO file by
     inspecting only the file header (ICONDIR) and its directory entries
@@ -193,3 +197,129 @@ def _largest_ico_from_header(data: bytes) -> Optional[Tuple[int, int]]:
         off += 16
 
     return best
+
+
+# ---------------------------------------------------------------------------
+# Shared helpers for sync/async main modules
+# ---------------------------------------------------------------------------
+
+
+def _prepare_download_list(
+    favicons: Union[list[Favicon], set[Favicon]],
+    mode: str,
+    include_unknown: bool,
+) -> list[Favicon]:
+    """Filter and order favicons before downloading them."""
+    if include_unknown is False:
+        favicons = [f for f in favicons if f.width != 0 and f.height != 0]
+
+    if mode.lower() in ["largest", "smallest"]:
+        return sorted(
+            favicons, key=lambda x: x.width * x.height, reverse=mode == "largest"
+        )
+    return list(favicons)
+
+
+def _sort_downloaded(favicons: list[Favicon], sort: str) -> list[Favicon]:
+    return sorted(
+        favicons, key=lambda x: x.width * x.height, reverse=sort.lower() == "desc"
+    )
+
+
+def _is_ico_response(content_type: str, favicon_format: Optional[str]) -> bool:
+    ct = content_type.lower()
+    return (
+        "x-icon" in ct
+        or "vnd.microsoft.icon" in ct
+        or favicon_format == "ico"
+    )
+
+
+def _http_from_reachable(url: str, result: dict[str, Any]) -> FaviconHttp:
+    return FaviconHttp(
+        original_url=url,
+        final_url=result.get("final_url", url),
+        redirected="redirect" in result,
+        status_code=result.get("status_code", -1),
+    )
+
+
+def _apply_reachable_result(fav: Favicon, result: dict[str, Any]) -> Favicon:
+    """Apply a HEAD-style `reachable` result on a favicon (used by check_availability)."""
+    fav_http = _http_from_reachable(fav.url, result)
+
+    if result["success"] is True:
+        fav = fav._replace(reachable=True, http=fav_http)
+    else:
+        fav = fav._replace(reachable=False, http=fav_http)
+
+    if "redirect" in result:
+        fav = fav._replace(url=result.get("final_url", fav.url))
+
+    return fav
+
+
+def _http_unreachable(url: str) -> FaviconHttp:
+    """Build a FaviconHttp for a connection error (no response available)."""
+    return FaviconHttp(
+        original_url=url, final_url=url, redirected=False, status_code=-1
+    )
+
+
+def _is_valid_remote_fav(fav: Favicon) -> bool:
+    return (
+        fav.reachable is True
+        and fav.valid is True
+        and fav.width > 0
+        and fav.height > 0
+    )
+
+
+def _duckduckgo_url(url: str) -> str:
+    tld = tldextract.extract(url)
+    return f"https://icons.duckduckgo.com/ip3/{tld.fqdn}.ico"
+
+
+def _google_url(url: str, size: int) -> str:
+    tld = tldextract.extract(url)
+    return (
+        "https://t2.gstatic.com/faviconV2"
+        f"?client=SOCIAL&type=FAVICON&fallback_opts=TYPE,SIZE,URL"
+        f"&url=https://{tld.fqdn}&size={size}"
+    )
+
+
+def _consume_size_chunk(
+    favicon: Favicon,
+    chunk: bytes,
+    buf: bytearray,
+    parser: "ImageFile.Parser",
+    bytes_parsed: int,
+    chunk_size: int,
+    max_bytes_parsed: int,
+    is_ico: bool,
+) -> Tuple[Favicon, int, bool]:
+    """Process a single chunk during streaming size detection.
+
+    Returns the (possibly updated) favicon, the new ``bytes_parsed`` counter
+    and a boolean indicating whether the caller should stop streaming.
+    """
+    buf.extend(chunk)
+    bytes_parsed += chunk_size
+
+    if is_ico is True:
+        wh = _largest_ico_from_header(buf)
+        if wh:
+            w, h = wh
+            return favicon._replace(width=w, height=h), bytes_parsed, True
+
+    parser.feed(chunk)
+
+    if parser.image is not None or bytes_parsed > max_bytes_parsed:
+        img = parser.image
+        if img is not None:
+            width, height = img.size
+            favicon = favicon._replace(width=width, height=height)
+        return favicon, bytes_parsed, True
+
+    return favicon, bytes_parsed, False
