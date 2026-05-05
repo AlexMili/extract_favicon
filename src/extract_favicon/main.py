@@ -22,7 +22,6 @@ from .utils import (
     _get_tag_elt,
     _google_url,
     _has_content,
-    _http_from_reachable,
     _http_unreachable,
     _is_absolute,
     _is_ico_response,
