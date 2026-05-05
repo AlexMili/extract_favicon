@@ -35,7 +35,7 @@ jobs:
         run: git log $(git describe --tags --abbrev=0)..HEAD --format="%s %h" > LATEST-CHANGES.md
 
       - name: Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: |
             dist/extract_favicon-${{ steps.getversion.outputs.version }}-py3-none-any.whl
