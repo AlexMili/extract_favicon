@@ -2,7 +2,7 @@ import base64
 import io
 import os
 from typing import Any, Optional, Tuple, Union
-from urllib.parse import urlparse
+from urllib.parse import unquote_to_bytes, urlparse
 
 import defusedxml.ElementTree as ETree
 from PIL import Image, UnidentifiedImageError
@@ -116,22 +116,27 @@ def _load_img(favicon: Favicon, bytes_content: bytes, force: bool = False) -> Fa
 
 def _load_base64_img(favicon: Favicon, force: bool = False) -> Favicon:
     if favicon.image is None or force is True:
-        data_img = favicon.url.split(",")
-        suffix = (
-            data_img[0]
-            .replace("data:", "")
-            .replace(";base64", "")
-            .replace("image", "")
-            .replace("/", "")
-            .lower()
-            .strip()
-        )
+        data_img = favicon.url.split(",", 1)
+        header = data_img[0]
+        header_params = header.replace("data:", "").lower().split(";")
+        suffix = header_params[0].replace("image", "").replace("/", "").strip()
+
+        is_base64 = False
+        for param in header_params[1:]:
+            if param.strip() == "base64":
+                is_base64 = True
+                break
+
+        if len(data_img) > 1:
+            # RFC 2397: without the ";base64" parameter, data is percent-encoded
+            if is_base64 is True:
+                bytes_content = base64.b64decode(data_img[1])
+            else:
+                bytes_content = unquote_to_bytes(data_img[1])
 
         if len(data_img) > 1 and suffix in ["svg", "svg+xml"]:
-            bytes_content = base64.b64decode(data_img[1])
             favicon = _load_svg_img(favicon, bytes_content)
         elif len(data_img) > 1:
-            bytes_content = base64.b64decode(data_img[1])
             img, is_valid = _open_and_verify_image(bytes_content)
             width, height, img_format = _get_meta_image(img)
 

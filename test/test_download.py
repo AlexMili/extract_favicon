@@ -77,6 +77,29 @@ async def test_base64_async(base64_img: str) -> None:
     assert favicons[0].height == 1
 
 
+def test_percent_encoded_svg(percent_encoded_svg_img: str) -> None:
+    fav = Favicon(percent_encoded_svg_img, format=None, width=0, height=0)
+    favicons = extract_favicon.download([fav])
+    assert len(favicons) == 1
+    assert favicons[0].url == fav.url
+    assert favicons[0].format == "svg"
+    assert favicons[0].http is None
+    assert favicons[0].valid is True
+    assert isinstance(favicons[0].image, bytes) is True
+
+
+@pytest.mark.asyncio
+async def test_percent_encoded_svg_async(percent_encoded_svg_img: str) -> None:
+    fav = Favicon(percent_encoded_svg_img, format=None, width=0, height=0)
+    favicons = await ef_async.download([fav])
+    assert len(favicons) == 1
+    assert favicons[0].url == fav.url
+    assert favicons[0].format == "svg"
+    assert favicons[0].http is None
+    assert favicons[0].valid is True
+    assert isinstance(favicons[0].image, bytes) is True
+
+
 @pytest.mark.parametrize(
     "url,is_valid",
     [("data:image/png;base64,", False), ("data:;base64,", False), ("data:", False)],
