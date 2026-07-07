@@ -45,4 +45,3 @@ known-first-party = ["extract_favicon"]
 strict = true
 exclude = [".venv", "test", "build", "dist"]
 ignore_missing_imports = true
-show_error_codes = true
